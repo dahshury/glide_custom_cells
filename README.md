@@ -2,8 +2,13 @@
 
 [Glide Data Grid](https://github.com/glideapps/glide-data-grid) is a blazing-fast React data-grid from Glide Apps. It supports **custom cell renderers**, letting you embed fully-fledged React components inside table cells. This repository showcases two such custom cells built with **Next.js**:
 
-1. **International Phone Number Cell** – powered by the excellent [shadcn/ui](https://ui.shadcn.com/) phone-input component.
+1. **International Phone Number Cell** –  [phone-input component](https://shadcn-phone-input.vercel.app/).
+
+<img src="media/phone-num-input.png" alt="Phone number input cell" width="400" />
+
 2. **Date & Time Cell** – built with [Tempus Dominus](https://github.com/tempusdominus/tempusdominus) for a rich calendar / time-picker experience.
+
+<img src="media/tempus-dom.png" alt="Date and time picker cell" width="400" />
 
 These cells are designed to be dropped straight into any Glide Data Grid instance (or another React data grid) while following modern front-end best practices: TypeScript, Tailwind CSS, ESLint/Prettier, and strict type safety.
 
