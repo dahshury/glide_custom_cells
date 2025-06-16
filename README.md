@@ -1,11 +1,11 @@
 # Glide Custom Cells
 
-Glide Apps allows you to extend data entry components with your own custom **Next.js** widgets. This repository contains two production-ready examples:
+[Glide Data Grid](https://github.com/glideapps/glide-data-grid) is a blazing-fast React data-grid from Glide Apps. It supports **custom cell renderers**, letting you embed fully-fledged React components inside table cells. This repository showcases two such custom cells built with **Next.js**:
 
 1. **International Phone Number Cell** – powered by the excellent [shadcn/ui](https://ui.shadcn.com/) phone-input component.
 2. **Date & Time Cell** – built with [Tempus Dominus](https://github.com/tempusdominus/tempusdominus) for a rich calendar / time-picker experience.
 
-These cells are designed to be dropped straight into your Glide project (or any React-based data grid) while following modern front-end best practices: TypeScript, Tailwind CSS, ESLint/Prettier, and strict type safety.
+These cells are designed to be dropped straight into any Glide Data Grid instance (or another React data grid) while following modern front-end best practices: TypeScript, Tailwind CSS, ESLint/Prettier, and strict type safety.
 
 ---
 
@@ -13,7 +13,7 @@ These cells are designed to be dropped straight into your Glide project (or any 
 1. [Getting Started](#-getting-started)
 2. [Scripts](#-scripts)
 3. [Folder Structure](#-folder-structure)
-4. [Usage in Glide](#-usage-in-glide)
+4. [Usage in Glide Data Grid](#-usage-in-glide-data-grid)
 5. [Contributing](#-contributing)
 6. [License](#-license)
 
@@ -25,10 +25,10 @@ These cells are designed to be dropped straight into your Glide project (or any 
 
 ```bash
 # SSH
-git clone git@github.com:YOUR_USER/glide_custom_cells.git
+git clone git@github.com:dahshury/glide_custom_cells.git
 
 # or HTTPS
-git clone https://github.com/YOUR_USER/glide_custom_cells.git
+git clone https://github.com/dahshury/glide_custom_cells.git
 
 cd glide_custom_cells
 npm install   # or yarn install or pnpm install
@@ -68,7 +68,7 @@ The project uses **Next.js 14** with the new `app/` directory disabled to keep t
 
 ---
 
-## 🔌 Usage in Glide
+## 🔌 Usage in Glide Data Grid
 1. Deploy this project (e.g. Vercel, Netlify, or your own server).
 2. Copy the embed URL of the specific cell you need (e.g. `/phone-input` or `/date-picker`).
 3. In Glide, add a **Web view** component and paste the URL.
