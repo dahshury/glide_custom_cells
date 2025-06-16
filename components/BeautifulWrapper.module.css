@@ -1,0 +1,16 @@
+.wrapper {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  color: #eee;
+}
+
+.description {
+  font-style: italic;
+  color: #bbb;
+}
+
+.content {
+  flex: 1;
+} 
