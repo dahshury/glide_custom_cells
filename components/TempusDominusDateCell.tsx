@@ -59,7 +59,18 @@ const renderer: CustomRenderer<TempusDateCell> = {
       const { data } = props.value;
       const { onFinishedEditing } = props;
       const inputRef = React.useRef<HTMLInputElement>(null);
+      const wrapperRef = React.useRef<HTMLDivElement>(null);
       const [tempusInstance, setTempusInstance] = React.useState<any>(null);
+
+      const toLocalDateInputValue = (date: Date): string =>
+        date.toLocaleDateString("en-CA"); // YYYY-MM-DD
+
+      const toLocalDateTimeInputValue = (date: Date): string => {
+        const pad = (n: number) => n.toString().padStart(2, "0");
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(
+          date.getMinutes()
+        )}`;
+      };
 
       React.useEffect(() => {
         if (!inputRef.current) return;
@@ -85,16 +96,16 @@ const renderer: CustomRenderer<TempusDateCell> = {
                 theme: (data.isDarkTheme ? "dark" : "light") as "dark" | "light", // Use theme based on Grid component state
                 buttons: {
                   today: true,
-                  clear: true,
-                  close: true
-                }
+                  clear: false,
+                  close: false,
+                },
               },
               restrictions: {
                 minDate: data.min ? new DateTime(data.min) : undefined,
                 maxDate: data.max ? new DateTime(data.max) : undefined,
               },
               localization: {
-                locale: 'en-US',
+                locale: "en-US",
               },
             };
 
@@ -297,9 +308,13 @@ const renderer: CustomRenderer<TempusDateCell> = {
           if (data.format === "time") {
             // For time, create a date with today's date but the selected time
             const today = new Date();
-            const [hours, minutes] = value.split(':').map(Number);
+            const [hours, minutes] = value.split(":").map(Number);
             newDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
+          } else if (data.format === "date") {
+            const [year, month, day] = value.split("-").map(Number);
+            newDate = new Date(year, month - 1, day);
           } else {
+            // datetime-local produces local date/time already
             newDate = new Date(value);
           }
         }
@@ -332,10 +347,10 @@ const renderer: CustomRenderer<TempusDateCell> = {
           case "time":
             return data.date.toTimeString().slice(0, 5); // HH:MM
           case "datetime":
-            return data.date.toISOString().slice(0, 16); // YYYY-MM-DDTHH:MM
+            return toLocalDateTimeInputValue(data.date); // local datetime string
           case "date":
           default:
-            return data.date.toISOString().slice(0, 10); // YYYY-MM-DD
+            return toLocalDateInputValue(data.date); // local date string
         }
       };
 
@@ -346,10 +361,10 @@ const renderer: CustomRenderer<TempusDateCell> = {
           case "time":
             return data.min.toTimeString().slice(0, 5);
           case "datetime":
-            return data.min.toISOString().slice(0, 16);
+            return toLocalDateTimeInputValue(data.min);
           case "date":
           default:
-            return data.min.toISOString().slice(0, 10);
+            return toLocalDateInputValue(data.min);
         }
       };
 
@@ -360,10 +375,10 @@ const renderer: CustomRenderer<TempusDateCell> = {
           case "time":
             return data.max.toTimeString().slice(0, 5);
           case "datetime":
-            return data.max.toISOString().slice(0, 16);
+            return toLocalDateTimeInputValue(data.max);
           case "date":
           default:
-            return data.max.toISOString().slice(0, 10);
+            return toLocalDateInputValue(data.max);
         }
       };
 
@@ -376,7 +391,7 @@ const renderer: CustomRenderer<TempusDateCell> = {
       }
 
       return (
-        <div style={wrapperStyle}>
+        <div ref={wrapperRef} style={wrapperStyle}>
           <input
             ref={inputRef}
             style={editorStyle}

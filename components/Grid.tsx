@@ -1,643 +1,749 @@
-// @ts-nocheck
 import React from "react";
+import {
+  Add,
+  Search,
+  Delete,
+  FileDownload,
+  Visibility,
+  Fullscreen,
+  FullscreenExit,
+  Close,
+  Undo,
+  Redo,
+} from "@emotion-icons/material-outlined";
 import DataEditor, {
-  GridCell,
+  DrawCellCallback,
+  GetRowThemeCallback,
   GridCellKind,
   Item,
+  CompactSelection,
+  GridCell,
   GridColumn,
   Theme,
-  EditableGridCell,
   GridSelection,
-  CompactSelection,
-  GridMouseEventArgs,
-  GetRowThemeCallback,
-  SpriteMap,
+  CustomRenderer,
+  DrawHeaderCallback,
 } from "@glideapps/glide-data-grid";
 import { DropdownCell as DropdownRenderer } from "@glideapps/glide-data-grid-cells";
-import TempusDateCellRenderer, { type TempusDateCell } from "./TempusDominusDateCell";
-import PhoneInputCellRenderer, { type PhoneInputCell } from "./PhoneInputCell";
-import { isValidPhoneNumber, parsePhoneNumber } from "react-phone-number-input";
+import TempusDateCellRenderer from "./TempusDominusDateCell";
+import PhoneInputCellRenderer from "./PhoneInputCell";
 
-const initialNumRows = 10; // Reduced to 10 rows
+import Tooltip from "./Tooltip";
+import { ColumnMenu } from "./menus/ColumnMenu";
+import { GridState, TooltipData, BaseColumnProps } from "./core/types";
+import { useColumnMenu } from "./hooks/useColumnMenu";
 
-// Dark theme overrides for the grid
-const darkTheme: Partial<Theme> = {
-  accentColor: "#4F5DFF",
-  accentLight: "rgba(79, 93, 255, 0.2)",
-  accentMedium: "rgba(79, 118, 255, 0.5)",
-  textDark: "#e8e8e8",
-  textMedium: "#9e9e9e",
-  textLight: "#6e6e6e",
-  textHeader: "#d0d0d0",
-  textHeaderSelected: "#ffffff",
-  bgCell: "#1e1e1e",
-  bgCellMedium: "#2a2a2a",
-  bgHeader: "#333333",
-  bgHeaderHasFocus: "#3b3b3b",
-  bgHeaderHovered: "#404040",
-  bgBubble: "#2a2a2a",
-  bgBubbleSelected: "#4F5DFF",
-  bgSearchResult: "rgba(79, 93, 255, 0.3)",
-  borderColor: "#444444",
-  drilldownBorder: "#666666",
-  linkColor: "#7c9cff",
-  cellHorizontalPadding: 8,
-  cellVerticalPadding: 3,
-  headerFontStyle: "600 13px",
-  baseFontStyle: "13px",
-  fontFamily: "Inter, Roboto, -apple-system, BlinkMacSystemFont, avenir next, avenir, segoe ui, helvetica neue, helvetica, Ubuntu, noto, arial, sans-serif",
-};
+import { useGridTheme } from "./hooks/useGridTheme";
+import { useGridColumns } from "./hooks/useGridColumns";
+import { useGridState } from "./hooks/useGridState";
+import { useGridData } from "./hooks/useGridData";
+import { useGridTooltips } from "./hooks/useGridTooltips";
+import { useGridActions } from "./hooks/useGridActions";
+import { useGridEvents } from "./hooks/useGridEvents";
+import { useGridLifecycle } from "./hooks/useGridLifecycle";
+import { useUndoRedo } from "./hooks/useUndoRedo";
 
-// Light theme with comprehensive text colors for dropdowns and all components
-const lightTheme: Partial<Theme> = {
-  textDark: "#000000",           // Black text for light theme dropdowns and primary text
-  textMedium: "#333333",         // Dark gray for secondary text
-  textLight: "#666666",          // Medium gray for tertiary text
-  textHeader: "#333333",         // Dark text for headers
-  textHeaderSelected: "#000000", // Black text for selected headers
-  bgCell: "#ffffff",             // White background for cells
-  bgCellMedium: "#f8f9fa",       // Light gray for medium cells
-  bgHeader: "#f1f3f4",           // Light gray for headers
-  bgHeaderHasFocus: "#e8eaed",   // Slightly darker for focused headers
-  bgHeaderHovered: "#e8eaed",    // Hover state for headers
-  bgBubble: "#ffffff",           // White background for dropdowns/bubbles
-  bgBubbleSelected: "#4F5DFF",   // Blue for selected items
-  borderColor: "#dadce0",        // Light border color
-  linkColor: "#1a73e8",          // Blue for links
-};
+import {
+  drawAttentionIndicator,
+  drawMissingPlaceholder,
+} from "./utils/cellDrawHelpers";
+import { extractCellDisplayText } from "./utils/cellTextExtraction";
 
-// Create custom renderers array with only the needed ones
-const customRenderers = [DropdownRenderer, TempusDateCellRenderer, PhoneInputCellRenderer];
-
-// Sample data generator - simplified for remaining columns
-const generateSampleData = (row: number, col: number): any => {
-  const seed = row * 1000 + col;
-  const random = () => {
-    const x = Math.sin(seed) * 10000;
-    return x - Math.floor(x);
-  };
-
-  switch (col) {
-    case 0: return `Text ${row + 1}`;
-    case 1: return ["Option A", "Option B", "Option C"][Math.floor(random() * 3)];
-    case 2: return new Date(2020 + Math.floor(random() * 4), Math.floor(random() * 12), Math.floor(random() * 28) + 1);
-    case 3: return new Date(1970, 0, 1, Math.floor(random() * 24), Math.floor(random() * 60));
-    case 4: return `+1${Math.floor(4160000000 + random() * 1000000000)}`;
-    default: return `Cell ${row},${col}`;
-  }
-};
-
-// Hook for keyboard event listener
-const useEventListener = (eventName: string, handler: (event: any) => void, element = window, passive = false, capture = false) => {
-  React.useEffect(() => {
-    if (!element?.addEventListener) return;
-    
-    element.addEventListener(eventName, handler, { passive, capture });
-    return () => element.removeEventListener(eventName, handler, { passive, capture });
-  }, [eventName, handler, element, passive, capture]);
-};
+// Register all custom renderers used by DataEditor
+const customRenderers = [
+  DropdownRenderer,
+  TempusDateCellRenderer,
+  PhoneInputCellRenderer,
+];
 
 export default function Grid() {
-  const [showSearch, setShowSearch] = React.useState(false);
-  const [searchValue, setSearchValue] = React.useState("");
-  const [selection, setSelection] = React.useState<GridSelection>({
-    rows: CompactSelection.empty(),
-    columns: CompactSelection.empty(),
-  });
-  const [rowSelection, setRowSelection] = React.useState<CompactSelection>(CompactSelection.empty());
-  const [hoverRow, setHoverRow] = React.useState<number | undefined>(undefined);
-  const [theme, setTheme] = React.useState<Partial<Theme>>(darkTheme);
-  const [numRows, setNumRows] = React.useState(initialNumRows);
+  /* ---------------------------- state & helpers ---------------------------- */
+  const gs = useGridState();
+  const {
+    theme,
+    setTheme,
+    darkTheme,
+    lightTheme,
+    iconColor,
+  } = useGridTheme();
 
-  // Track which columns have been manually resized
-  const hasResized = React.useRef(new Set<number>());
+  const {
+    columns,
+    columnsState,
+    displayColumns,
+    visibleColumnIndices,
+    onColumnResize,
+    setColumns,
+    onColumnMoved,
+    togglePin,
+    pinnedColumns,
+  } = useGridColumns(gs.hiddenColumns);
 
-  // Store cell data for editing
-  const cellData = React.useRef(new Map<string, any>());
+  /* ------------------------------ column menu ------------------------------ */
+  const columnMenu = useColumnMenu();
 
-  // Apply theme class to document root for CSS variables
-  React.useEffect(() => {
-    const isDark = theme === darkTheme;
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    
-    // Cleanup on unmount
-    return () => {
-      document.documentElement.classList.remove('dark');
-    };
-  }, [theme]);
-
-  // Add CSS overrides for dropdown text color based on theme
-  React.useEffect(() => {
-    const styleId = 'dropdown-theme-override';
-    let existingStyle = document.getElementById(styleId);
-    
-    if (existingStyle) {
-      existingStyle.remove();
-    }
-
-    const style = document.createElement('style');
-    style.id = styleId;
-    
-    if (theme === lightTheme) {
-      // Light theme: ensure dropdown text is black
-      style.textContent = `
-        .gdg-growing-entry .gdg-input,
-        .gdg-growing-entry input,
-        .gdg-growing-entry select,
-        .gdg-growing-entry textarea,
-        [class*="react-select"] .gdg-input,
-        [class*="react-select"] input,
-        [class*="react-select"] [class*="singleValue"],
-        [class*="react-select"] [class*="placeholder"],
-        [class*="react-select"] [class*="option"],
-        [class*="react-select"] [class*="menu"] {
-          color: #000000 !important;
-        }
-        
-        [class*="react-select"] [class*="menu"] {
-          background-color: #ffffff !important;
-        }
-        
-        [class*="react-select"] [class*="option"]:hover {
-          background-color: #f0f0f0 !important;
-          color: #000000 !important;
-        }
-        
-        [class*="react-select"] [class*="option--is-selected"] {
-          background-color: #4F5DFF !important;
-          color: #ffffff !important;
-        }
-      `;
-    } else {
-      // Dark theme: ensure dropdown text is light
-      style.textContent = `
-        .gdg-growing-entry .gdg-input,
-        .gdg-growing-entry input,
-        .gdg-growing-entry select,
-        .gdg-growing-entry textarea,
-        [class*="react-select"] .gdg-input,
-        [class*="react-select"] input,
-        [class*="react-select"] [class*="singleValue"],
-        [class*="react-select"] [class*="placeholder"],
-        [class*="react-select"] [class*="option"],
-        [class*="react-select"] [class*="menu"] {
-          color: #e8e8e8 !important;
-        }
-        
-        [class*="react-select"] [class*="menu"] {
-          background-color: #2a2a2a !important;
-        }
-        
-        [class*="react-select"] [class*="option"]:hover {
-          background-color: #404040 !important;
-          color: #e8e8e8 !important;
-        }
-        
-        [class*="react-select"] [class*="option--is-selected"] {
-          background-color: #4F5DFF !important;
-          color: #ffffff !important;
-        }
-      `;
-    }
-    
-    document.head.appendChild(style);
-    
-    return () => {
-      const styleToRemove = document.getElementById(styleId);
-      if (styleToRemove) {
-        styleToRemove.remove();
-      }
-    };
-  }, [theme]); // Re-run when theme changes
-
-  // Keyboard shortcut for search (Ctrl+F / Cmd+F)
-  useEventListener(
-    "keydown",
-    React.useCallback((event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.code === "KeyF") {
-        setShowSearch(cv => !cv);
-        event.stopPropagation();
-        event.preventDefault();
-      }
-    }, []),
-    window,
-    false,
-    true
+  const {
+    getCellContent: baseGetCellContent,
+    onCellEdited: baseOnCellEdited,
+    getRawCellContent,
+  } = useGridData(
+    visibleColumnIndices,
+    theme,
+    darkTheme,
+    gs.initialNumRows,
+    columnMenu.columnFormats
   );
 
-  // Header icons for each column type
-  const headerIcons = React.useMemo<SpriteMap>(() => {
-    return {
-      text: p => `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="16" height="16" rx="3" fill="${p.bgColor}"/>
-        <path d="M6 7h8M6 10h6M6 13h4" stroke="${p.fgColor}" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>`,
-      dropdown: p => `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="16" height="16" rx="3" fill="${p.bgColor}"/>
-        <path d="M6 8h8M6 11h6" stroke="${p.fgColor}" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="m13 9 2 2-2 2" stroke="${p.fgColor}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>`,
-      date: p => `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="16" height="16" rx="3" fill="${p.bgColor}"/>
-        <path d="M6 6v2M14 6v2M4 10h12" stroke="${p.fgColor}" stroke-width="1.5" stroke-linecap="round"/>
-        <rect x="4" y="4" width="12" height="12" rx="2" stroke="${p.fgColor}" stroke-width="1.5"/>
-      </svg>`,
-      time: p => `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="16" height="16" rx="3" fill="${p.bgColor}"/>
-        <circle cx="10" cy="10" r="6" stroke="${p.fgColor}" stroke-width="1.5"/>
-        <path d="M10 7v3l2 2" stroke="${p.fgColor}" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>`,
-      phone: p => `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="16" height="16" rx="3" fill="${p.bgColor}"/>
-        <path d="M7 4h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" stroke="${p.fgColor}" stroke-width="1.5"/>
-        <path d="M9 14h2" stroke="${p.fgColor}" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>`
-    };
-  }, []);
+  /* --------------------------- derived row helpers -------------------------- */
+  const [sortState, setSortState] = React.useState<{ columnId: string; direction: "asc" | "desc" } | null>(null);
+  const dataEditorRef = React.useRef<any>(null);
 
-  // Simplified columns - only text, dropdown, date, time, phone
-  const columns: GridColumn[] = React.useMemo(
-    () => [
-      { title: "Name", width: 200, id: "text", icon: "text" },
-      { title: "Dropdown", width: 180, id: "dropdown", icon: "dropdown" },
-      { title: "Date", width: 160, id: "date", icon: "date" },
-      { title: "Time", width: 140, id: "time", icon: "time" },
-      { title: "Phone", width: 126, id: "phone", icon: "phone" }, // Reduced by ~30% (from 180px to 126px)
-    ].map((col, i) => ({
-      ...col,
-      // Add grow property - columns grow proportionally until manually resized
-      grow: hasResized.current.has(i) ? undefined : (5 + i) / 5,
-    })),
-    [hasResized.current.size] // Re-compute when resize tracking changes
-  );
-
-  // Filter data based on search
-  const filteredRowCount = React.useMemo(() => {
-    if (searchValue.length === 0) return numRows;
-    
-    let matchCount = 0;
-    for (let row = 0; row < numRows; row++) {
-      for (let col = 0; col < columns.length; col++) {
-        const cellKey = `${col}-${row}`;
-        const cellValue = cellData.current.get(cellKey);
-        const data = cellValue !== undefined ? cellValue : generateSampleData(row, col);
-        const cellText = String(data).toLowerCase();
-        if (cellText.includes(searchValue.toLowerCase())) {
-          matchCount++;
-          break; // Found match in this row, move to next row
-        }
-      }
-    }
-    return matchCount;
-  }, [searchValue, columns.length, numRows]);
-
-  // Get filtered row indices
   const filteredRows = React.useMemo(() => {
-    if (searchValue.length === 0) return Array.from({ length: numRows }, (_, i) => i);
-    
-    const matches: number[] = [];
-    for (let row = 0; row < numRows; row++) {
-      for (let col = 0; col < columns.length; col++) {
-        const cellKey = `${col}-${row}`;
-        const cellValue = cellData.current.get(cellKey);
-        const data = cellValue !== undefined ? cellValue : generateSampleData(row, col);
-        const cellText = String(data).toLowerCase();
-        if (cellText.includes(searchValue.toLowerCase())) {
-          matches.push(row);
-          break; // Found match in this row, move to next row
+    const out: number[] = [];
+    const q = gs.searchValue.toLowerCase();
+
+    for (let row = 0; row < gs.numRows; row++) {
+      if (gs.deletedRows.has(row)) continue;
+      if (!q) {
+        out.push(row);
+        continue;
+      }
+      for (let c = 0; c < displayColumns.length; c++) {
+        const colIdx = visibleColumnIndices[c];
+        if (colIdx === undefined) continue;
+        const cell = getRawCellContent(colIdx, row);
+        const txt = (
+          (cell as any).displayData ?? (cell as any).data ?? ""
+        )
+          .toString()
+          .toLowerCase();
+        if (txt.includes(q)) {
+          out.push(row);
+          break;
         }
       }
     }
-    return matches;
-  }, [searchValue, columns.length, numRows]);
 
-  const getCellContent = React.useCallback((cell: Item): GridCell => {
-    const [col, displayRow] = cell;
-    
-    // Map display row to actual row index when filtering
-    const actualRow = searchValue.length === 0 ? displayRow : filteredRows[displayRow];
-    if (actualRow === undefined) {
-      return { kind: GridCellKind.Text, data: "", displayData: "", allowOverlay: false };
+    // Apply sorting if set
+    if (sortState) {
+      const colIdx = displayColumns.findIndex(c => c.id === sortState.columnId);
+      if (colIdx >= 0) {
+        out.sort((a, b) => {
+          const cellA = getRawCellContent(visibleColumnIndices[colIdx], a);
+          const cellB = getRawCellContent(visibleColumnIndices[colIdx], b);
+
+          const digitOnly = (s: string) => s.replace(/\D+/g, "");
+
+          const extractValue = (cell: any) => {
+            if (cell.kind === GridCellKind.Number) return cell.data ?? 0;
+
+            if (cell.kind === GridCellKind.Custom) {
+              const k = cell.data?.kind;
+              switch (k) {
+                case "dropdown-cell":
+                  return cell.data.value ?? "";
+                case "tempus-date-cell":
+                  return cell.data.date ?? null; // May be Date or null
+                case "phone-input-cell":
+                  return cell.data.phone ?? "";
+                default:
+                  return cell.data ?? cell.displayData ?? "";
+              }
+            }
+
+            return cell.data ?? cell.displayData ?? "";
+          };
+
+          const valA = extractValue(cellA);
+          const valB = extractValue(cellB);
+
+          // Date comparison
+          if (valA instanceof Date && valB instanceof Date) {
+            const comp = valA.getTime() - valB.getTime();
+            return sortState.direction === "asc" ? comp : -comp;
+          }
+
+          // Numeric comparison (including phone numbers converted to digits)
+          const numParse = (v: any) => {
+            if (typeof v === "string" && /^[\d\s+()-]+$/.test(v)) {
+              const digits = digitOnly(v);
+              return digits.length ? Number(digits) : NaN;
+            }
+            return Number(v);
+          };
+
+          const numA = numParse(valA);
+          const numB = numParse(valB);
+
+          if (!isNaN(numA) && !isNaN(numB)) {
+            const comp = numA - numB;
+            return sortState.direction === "asc" ? comp : -comp;
+          }
+
+          // Fallback string comparison
+          const strA = (valA ?? "").toString().toLowerCase();
+          const strB = (valB ?? "").toString().toLowerCase();
+          if (strA < strB) return sortState.direction === "asc" ? -1 : 1;
+          if (strA > strB) return sortState.direction === "asc" ? 1 : -1;
+          return 0;
+        });
+      }
     }
 
-    // Check if we have edited data for this cell
-    const cellKey = `${col}-${actualRow}`;
-    const cellValue = cellData.current.get(cellKey);
-    const data = cellValue !== undefined ? cellValue : generateSampleData(actualRow, col);
+    return out;
+  }, [
+    gs.searchValue,
+    gs.deletedRows,
+    gs.numRows,
+    displayColumns,
+    visibleColumnIndices,
+    getRawCellContent,
+    sortState,
+  ]);
 
-    switch (col) {
-      case 0: // Text
+  const filteredRowCount = filteredRows.length;
+
+  /* ----------------------- sizing constants ----------------------- */
+  const rowHeight = 33;
+  const headerHeight = 35;
+
+  const calcHeight = () => headerHeight + filteredRowCount * rowHeight + rowHeight;
+
+  /* -------------------------- wrapped callbacks -------------------------- */
+  const getCellContent = React.useCallback(
+    (cell: Item) => {
+      const baseCell = baseGetCellContent(filteredRows)(cell);
+      const [col] = cell;
+      const column = displayColumns[col] as any;
+
+      if (column?.sticky) {
+        // For text cells, use the built-in "faded" style that glide-data-grid supports.
+        if (baseCell.kind === GridCellKind.Text && (baseCell as any).style !== "faded") {
+          return { ...(baseCell as any), style: "faded" } as any;
+        }
+
+        // For all cells, slightly reduce text contrast to indicate pinning.
+        // We clone to avoid mutating the cached cell instance.
         return {
-          kind: GridCellKind.Text,
-          data: data,
-          displayData: data,
-          allowOverlay: true,
-        };
-      case 1: // Dropdown
-        return {
-          kind: GridCellKind.Custom,
-          data: {
-            kind: "dropdown-cell",
-            allowedValues: ["Option A", "Option B", "Option C"],
-            value: data,
+          ...(baseCell as any),
+          themeOverride: {
+            ...(baseCell as any).themeOverride,
+            textDark: theme === darkTheme ? "#a1a1aa" : "#6b7280",
           },
-          copyData: data,
-          allowOverlay: true,
         } as any;
-      case 2: // Date Picker (Date)
-        return {
-          kind: GridCellKind.Custom,
-          data: {
-            kind: "tempus-date-cell",
-            format: "date",
-            date: data,
-            displayDate: data instanceof Date ? data.toLocaleDateString() : "",
-            isDarkTheme: theme === darkTheme, // Pass current theme state
-          },
-          copyData: data instanceof Date ? data.toLocaleDateString() : "",
-          allowOverlay: true,
-        } as TempusDateCell;
-      case 3: // Time Picker (Time)
-        return {
-          kind: GridCellKind.Custom,
-          data: {
-            kind: "tempus-date-cell",
-            format: "time",
-            date: data,
-            displayDate: data instanceof Date ? data.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}) : "",
-            isDarkTheme: theme === darkTheme, // Pass current theme state
-          },
-          copyData: data instanceof Date ? data.toLocaleTimeString() : "",
-          allowOverlay: true,
-        } as TempusDateCell;
-      case 4: // Phone
-        return {
-          kind: GridCellKind.Custom,
-          data: {
-            kind: "phone-input-cell",
-            phone: data,
-            displayPhone: data,
-            isDarkTheme: theme === darkTheme,
-          },
-          copyData: data,
-          allowOverlay: true,
-        } as PhoneInputCell;
-      default:
-        return {
-          kind: GridCellKind.Text,
-          data: data,
-          displayData: data,
-          allowOverlay: true,
-        };
-    }
-  }, [searchValue, filteredRows, numRows, theme]); // Add theme to dependencies
+      }
 
-  const onCellEdited = React.useCallback((cell: Item, newValue: EditableGridCell) => {
-    const [col, displayRow] = cell;
-    const actualRow = searchValue.length === 0 ? displayRow : filteredRows[displayRow];
-    
-    if (actualRow !== undefined) {
-      const cellKey = `${col}-${actualRow}`;
+      // If previously pinned cell retained faded style, remove it now
+      if (
+        baseCell.kind === GridCellKind.Text &&
+        ((baseCell as any).style === "faded" || (baseCell as any).themeOverride)
+      ) {
+        const { style: _s, themeOverride: _t, ...rest } = baseCell as any;
+        return { ...rest } as any;
+      }
+
+      return baseCell;
+    },
+    [filteredRows, baseGetCellContent, displayColumns, theme, darkTheme]
+  );
+
+  const onCellEdited = React.useCallback(
+    (cell: Item, newVal: any) => baseOnCellEdited(filteredRows)(cell, newVal),
+    [filteredRows, baseOnCellEdited]
+  );
+
+  /* ----------------------------- undo / redo ----------------------------- */
+  const {
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    onCellEdited: undoOnCellEdited,
+    onGridSelectionChange,
+  } = useUndoRedo(
+    dataEditorRef,
+    getCellContent,
+    onCellEdited,
+    gs.setSelection
+  );
+
+  /* ----------------------------- grid actions ----------------------------- */
+  const actions = useGridActions(
+    columns,
+    gs.setHiddenColumns,
+    gs.selection,
+    gs.setDeletedRows,
+    filteredRows,
+    gs.numRows,
+    getRawCellContent,
+    gs.deletedRows,
+    columnsState,
+    setColumns,
+    gs.hiddenColumns
+  );
+
+  /* ------------------------------- tooltips ------------------------------- */
+  const tooltipMatrix = React.useMemo(() => {
+    return filteredRows.map(rowIdx =>
+      displayColumns.map((_, cIdx) => {
+        const colIdx = visibleColumnIndices[cIdx];
+        if (colIdx === undefined) return undefined;
+        const cell = getRawCellContent(colIdx, rowIdx);
+        return (cell as any).data ?? (cell as any).displayData;
+      })
+    );
+  }, [filteredRows, displayColumns, visibleColumnIndices, getRawCellContent]);
+
+  const { tooltipData, onTooltipHover } = useGridTooltips(
+    tooltipMatrix,
+    displayColumns
+  );
+
+  /* ------------------------- external event hooks ------------------------- */
+  useGridEvents(gs.setShowSearch);
+  useGridLifecycle(
+    gs.isFullscreen,
+    gs.showColumnMenu,
+    gs.setShowColumnMenu
+  );
+
+  /* ------------------------------ draw cell ------------------------------ */
+  const drawCell: DrawCellCallback = React.useCallback(
+    (args, draw) => {
+      const { cell, col } = args;
+      const column = displayColumns[col] as any;
+
+      // Only text-kind cells can be marked as missing
+      if ((cell as any).isMissingValue) {
+        // TODO: Fix drawMissingPlaceholder type compatibility
+        // drawMissingPlaceholder(args);
+        if ((column as any)?.isRequired && (column as any)?.isEditable) {
+          const { ctx, rect } = args;
+          drawAttentionIndicator(ctx, rect, theme as any);
+        }
+        return;
+      }
+      draw();
+    },
+    [displayColumns, theme]
+  );
+
+  /* ---------------------------- row theming ---------------------------- */
+  const getRowThemeOverride: GetRowThemeCallback = React.useCallback(
+    row => {
+      // Highlight hover row
+      if (row === gs.hoverRow) {
+        return { 
+          bgCell: (theme as any).bgCellMedium, 
+          bgCellMedium: (theme as any).bgCellMedium 
+        };
+      }
+
+      // Style the implicit "+ Add Row" builder row like header
+      if (row === filteredRowCount) {
+        return {
+          bgCell: (theme as any).bgHeader ?? (theme as any).bgCell,
+          bgCellMedium: (theme as any).bgHeader ?? (theme as any).bgCellMedium,
+          textDark: (theme as any).textHeader,
+        } as any;
+      }
+
+      return undefined;
+    },
+    [gs.hoverRow, theme, darkTheme, filteredRowCount]
+  );
+
+
+
+  /* ---------------------- column menu action handlers --------------------- */
+  const handleSort = React.useCallback(
+    (columnId: string, direction: "asc" | "desc") => {
+      setSortState({ columnId, direction });
+    },
+    []
+  );
+
+  const handlePin = React.useCallback(
+    (columnId: string, _side: "left" | "right") => {
+      const idx = columns.findIndex(c => c.id === columnId);
+      if (idx >= 0) {
+        togglePin(idx);
+        columnMenu.pinColumn(columnId, "left");
+      }
+    },
+    [columns, togglePin, columnMenu]
+  );
+
+  const handleUnpin = React.useCallback((columnId: string) => {
+    const idx = columns.findIndex(c => c.id === columnId);
+    if (idx >= 0) {
+      togglePin(idx);
+      columnMenu.unpinColumn(columnId);
+    }
+  }, [columns, togglePin, columnMenu]);
+
+  const handleHide = React.useCallback((columnId: string) => {
+    const idx = columns.findIndex(c => c.id === columnId);
+    if (idx >= 0) gs.setHiddenColumns(prev => new Set([...prev, idx]));
+  }, [columns, gs]);
+
+  const handleAutosize = React.useCallback((columnId: string) => {
+    // Manual autosize implementation since remeasureColumns requires auto-sized columns
+    const colIdx = displayColumns.findIndex(c => c.id === columnId);
+    if (colIdx < 0) return;
+
+    const actualColIndex = visibleColumnIndices[colIdx];
+    if (actualColIndex === undefined) return;
+
+    // Measure content similar to Streamlit's approach but adapted for our setup
+    let maxWidth = displayColumns[colIdx].title.length * 8; // Rough character width
+
+    // Sample up to 100 rows for performance
+    const sampleSize = Math.min(filteredRows.length, 100);
+    for (let i = 0; i < sampleSize; i++) {
+      const row = filteredRows[i];
+      const cell = getRawCellContent(actualColIndex, row);
       
-      // Store the edited value
-      if (newValue.kind === GridCellKind.Text) {
-        cellData.current.set(cellKey, newValue.data);
-      } else if (newValue.kind === GridCellKind.Custom) {
-        if (DropdownRenderer.isMatch && DropdownRenderer.isMatch(newValue)) {
-          cellData.current.set(cellKey, (newValue as any).data.value);
-        } else if (TempusDateCellRenderer.isMatch && TempusDateCellRenderer.isMatch(newValue)) {
-          cellData.current.set(cellKey, (newValue as any).data.date);
-        } else if (PhoneInputCellRenderer.isMatch && PhoneInputCellRenderer.isMatch(newValue)) {
-          cellData.current.set(cellKey, (newValue as any).data.phone);
+      // Extract display text from different cell types
+      let text = "";
+      if (cell.kind === GridCellKind.Text) {
+        text = (cell as any).displayData || (cell as any).data || "";
+      } else if (cell.kind === GridCellKind.Number) {
+        text = String((cell as any).data || "");
+      } else if (cell.kind === GridCellKind.Custom) {
+        // Handle our custom cell types
+        const customData = (cell as any).data;
+        if (customData?.kind === "dropdown-cell") {
+          text = customData.value || "";
+        } else if (customData?.kind === "tempus-date-cell") {
+          text = customData.date ? customData.date.toLocaleDateString() : "";
+        } else if (customData?.kind === "phone-input-cell") {
+          text = customData.phone || "";
+        } else {
+          text = (cell as any).displayData || (cell as any).data || "";
         }
       }
       
-      console.log("Cell edited:", cell, newValue);
-    }
-  }, [searchValue, filteredRows]);
-
-  // Handle row hover for hover effect
-  const onItemHovered = React.useCallback((args: GridMouseEventArgs) => {
-    const [_, row] = args.location;
-    setHoverRow(args.kind !== "cell" ? undefined : row);
-  }, []);
-
-  // Get row theme override for hover effect
-  const getRowThemeOverride = React.useCallback<GetRowThemeCallback>(row => {
-    if (row !== hoverRow) return undefined;
-    
-    // Different hover colors for light and dark themes
-    if (theme === darkTheme) {
-      return {
-        bgCell: "#404040",
-        bgCellMedium: "#383838"
-      };
-    } else {
-      return {
-        bgCell: "#f7f7f7",
-        bgCellMedium: "#f0f0f0"
-      };
-    }
-  }, [hoverRow, theme]);
-
-  // Validate cell content - specifically for name validation in text column
-  const validateCell = React.useCallback((cell: Item, newValue: EditableGridCell) => {
-    const [col] = cell;
-    
-    // Column 0 – Name validation
-    if (col === 0 && newValue.kind === GridCellKind.Text) {
-      const name = newValue.data.trim();
-
-      // Empty not allowed
-      if (!name) return false;
-      if (/\d/.test(name)) return false; // No numbers
-
-      const words = name.split(/\s+/).filter(w => w.length > 0);
-      if (words.length < 2) return false;
-      for (const w of words) {
-        if (w.length < 2 || !/^[\p{L}]+$/u.test(w)) return false;
-      }
-
-      const capitalized = words
-        .map(w => w.charAt(0).toLocaleUpperCase() + w.slice(1).toLocaleLowerCase())
-        .join(" ");
-      if (capitalized !== name) {
-        return { ...newValue, data: capitalized };
-      }
-      return true;
+      maxWidth = Math.max(maxWidth, text.length * 8);
     }
 
-    // Column 4 – Phone: accept all; renderer will show invalid numbers in red
-    if (col === 4) {
-      return true;
-    }
+    // Add padding and constrain to reasonable bounds
+    const newWidth = Math.max(60, Math.min(maxWidth + 32, 400));
 
-    return true; // All other cells valid by default
-  }, []);
+    // Update the column width
+    setColumns(prev => prev.map((c, idx) => 
+      idx === actualColIndex ? { ...c, width: newWidth } : c
+    ));
+  }, [displayColumns, visibleColumnIndices, setColumns, filteredRows, getRawCellContent]);
 
-  // Handle column resize with grow tracking
-  const onColumnResize = React.useCallback((column: GridColumn, newSize: number, colIndex: number, newSizeWithGrow: number) => {
-    // Mark this column as manually resized
-    hasResized.current.add(colIndex);
-    
-    // Log the resize for debugging
-    console.log(`Column ${colIndex} (${column.title}) resized to ${newSizeWithGrow}px`);
-    
-    // Force re-render to update grow properties
-    // This will cause columns to recalculate without grow for resized columns
-  }, []);
 
-  // Handle adding new rows
-  const onRowAppended = React.useCallback(() => {
-    const newRow = numRows;
-    setNumRows(cv => cv + 1);
-    
-    // Initialize new row with appropriate default values for each column type
-    for (let c = 0; c < columns.length; c++) {
-      const cellKey = `${c}-${newRow}`;
-      let defaultValue: any;
-      
-      switch (c) {
-        case 0: // Text
-          defaultValue = "";
-          break;
-        case 1: // Dropdown
-          defaultValue = "";
-          break;
-        case 2: // Date
-          defaultValue = new Date();
-          break;
-        case 3: // Time
-          defaultValue = new Date();
-          break;
-        case 4: // Phone
-          defaultValue = "";
-          break;
-        default:
-          defaultValue = "";
-          break;
-      }
-      
-      cellData.current.set(cellKey, defaultValue);
-    }
-  }, [numRows, columns.length]);
-
-  // Calculate dynamic height based on data
-  const calculateGridHeight = () => {
-    const headerHeight = 36; // Default header height
-    const rowHeight = 34; // Default row height
-    const trailingRowHeight = 34; // Height for the implicit "add row" line
-
-    // Grid height = header + all data rows + one trailing row
-    return headerHeight + filteredRowCount * rowHeight + trailingRowHeight;
-  };
-
-  // Calculate dynamic width based on columns
-  const calculateGridWidth = () => {
-    return columns.reduce((total, col) => total + (col.width || 150), 0) + 50; // Extra padding
-  };
 
   return (
-    <div style={{ width: "100%", height: "100%" }}>
-      {/* Theme Controls */}
-      <div style={{ 
-        padding: "16px", 
-        marginBottom: "16px", 
-        backgroundColor: theme === darkTheme ? "#2a2a2a" : "#f5f5f5",
-        borderRadius: "8px",
-        display: "flex",
-        gap: "12px",
-        alignItems: "center"
-      }}>
-        <span style={{ color: theme === darkTheme ? "#e8e8e8" : "#333" }}>
-          Theme:
-        </span>
-        <button 
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative",
+        backgroundColor: theme === darkTheme ? "#1e1e1e" : "#ffffff",
+        borderRadius: "12px",
+        overflow: "hidden",
+      }}
+      onMouseEnter={() => gs.setIsFocused(true)}
+      onMouseLeave={() => gs.setIsFocused(false)}
+    >
+      {/* Theme Toggle Bar */}
+      <div
+        style={{
+          padding: "16px",
+          marginBottom: "16px",
+          backgroundColor: theme === darkTheme ? "#2a2a2a" : "#f5f5f5",
+          borderRadius: "8px",
+          display: "flex",
+          gap: "12px",
+          alignItems: "center",
+        }}
+      >
+        <span style={{ color: iconColor }}>Theme:</span>
+        <button
           onClick={() => setTheme(lightTheme)}
           style={{
             padding: "8px 16px",
             backgroundColor: theme === lightTheme ? "#4F5DFF" : "transparent",
-            color: theme === lightTheme ? "white" : (theme === darkTheme ? "#e8e8e8" : "#333"),
+            color: theme === lightTheme ? "white" : iconColor,
             border: "1px solid #4F5DFF",
             borderRadius: "4px",
-            cursor: "pointer"
+            cursor: "pointer",
           }}
         >
           Light
         </button>
-        <button 
+        <button
           onClick={() => setTheme(darkTheme)}
           style={{
             padding: "8px 16px",
             backgroundColor: theme === darkTheme ? "#4F5DFF" : "transparent",
-            color: theme === darkTheme ? "white" : (theme === darkTheme ? "#e8e8e8" : "#333"),
+            color: theme === darkTheme ? "white" : iconColor,
             border: "1px solid #4F5DFF",
             borderRadius: "4px",
-            cursor: "pointer"
+            cursor: "pointer",
           }}
         >
           Dark
         </button>
-        <span style={{ 
-          marginLeft: "auto", 
-          color: theme === darkTheme ? "#9e9e9e" : "#666",
-          fontSize: "14px"
-        }}>
-          Rows: {numRows} | Press Ctrl+F to search
+        <span style={{ marginLeft: "auto", color: iconColor, fontSize: "14px" }}>
+          Rows: {filteredRowCount} | Press Ctrl+F to search | Right-click column headers for options
         </span>
       </div>
 
-      {/* Data Grid */}
+      {/* Toolbar container - positioned above the grid in normal mode, floating in fullscreen */}
+      <div
+        style={{
+          ...(gs.isFullscreen ? {
+            position: "fixed",
+            top: "1rem",
+            right: "1rem",
+            zIndex: 1000,
+          } : {
+            display: "flex",
+            justifyContent: "flex-end",
+            marginBottom: "8px",
+          }),
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            boxShadow: "1px 2px 8px rgba(0, 0, 0, 0.08)",
+            borderRadius: "8px",
+            backgroundColor:
+              theme === darkTheme ? "rgba(42, 42, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+            backdropFilter: "blur(10px)",
+            padding: "4px",
+            opacity: gs.isFocused || gs.isFullscreen ? 1 : 0,
+            transition: "opacity 150ms ease-in-out",
+            pointerEvents: gs.isFocused || gs.isFullscreen ? "auto" : "none",
+          }}
+        >
+          {/* Clear Selection */}
+          {actions.hasSelection && (
+            <button
+              onClick={() => {
+                gs.setSelection({
+                  rows: CompactSelection.empty(),
+                  columns: CompactSelection.empty(),
+                });
+                gs.setRowSelection(CompactSelection.empty());
+              }}
+              title="Clear selection"
+              style={{
+                background: "transparent",
+                border: "none",
+                padding: "4px",
+                cursor: "pointer",
+                color: iconColor,
+              }}
+            >
+              <Close size={20} />
+            </button>
+          )}
+
+          {/* Delete Rows */}
+          {actions.hasSelection && (
+            <button
+              onClick={() => {
+                actions.handleDeleteRows();
+                gs.setSelection({ rows: CompactSelection.empty(), columns: CompactSelection.empty() });
+                gs.setRowSelection(CompactSelection.empty());
+              }}
+              title="Delete rows"
+              style={{ background: "transparent", border: "none", color: iconColor }}
+            >
+              <Delete size={20} />
+            </button>
+          )}
+
+          {/* Undo */}
+          <button
+            onClick={undo}
+            title="Undo (Ctrl+Z)"
+            disabled={!canUndo}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: "4px",
+              cursor: canUndo ? "pointer" : "not-allowed",
+              color: iconColor,
+              opacity: canUndo ? 1 : 0.4,
+            }}
+          >
+            <Undo size={18} style={{ opacity: 0.8 }} />
+          </button>
+
+          {/* Redo */}
+          <button
+            onClick={redo}
+            title="Redo (Ctrl+Shift+Z)"
+            disabled={!canRedo}
+            style={{
+              background: "transparent",
+              border: "none",
+              padding: "4px",
+              cursor: canRedo ? "pointer" : "not-allowed",
+              color: iconColor,
+              opacity: canRedo ? 1 : 0.4,
+            }}
+          >
+            <Redo size={18} style={{ opacity: 0.8 }} />
+          </button>
+
+          {/* Add Row */}
+          {!actions.hasSelection && (
+            <button
+              onClick={() => gs.setNumRows((n) => n + 1)}
+              title="Add row"
+              style={{ background: "transparent", border: "none", padding: "4px", cursor: "pointer", color: iconColor }}
+            >
+              <Add size={20} />
+            </button>
+          )}
+
+          {/* Column visibility */}
+          {columns.length > displayColumns.length && (
+            <button
+              onClick={actions.handleToggleColumnVisibility}
+              title="Show/hide columns"
+              style={{ background: "transparent", border: "none", padding: "4px", cursor: "pointer", color: iconColor }}
+            >
+              <Visibility size={20} />
+            </button>
+          )}
+
+          {/* Download CSV */}
+          <button
+            onClick={actions.handleDownloadCsv}
+            title="Download as CSV"
+            style={{ background: "transparent", border: "none", padding: "4px", cursor: "pointer", color: iconColor }}
+          >
+            <FileDownload size={20} />
+          </button>
+
+          {/* Search */}
+          <button
+            onClick={() => gs.setShowSearch((v) => !v)}
+            title="Search"
+            style={{ background: "transparent", border: "none", padding: "4px", cursor: "pointer", color: iconColor }}
+          >
+            <Search size={20} />
+          </button>
+
+          {/* Fullscreen toggle */}
+          <button
+            onClick={() => gs.setIsFullscreen((v) => !v)}
+            title={gs.isFullscreen ? "Close fullscreen" : "Fullscreen"}
+            style={{ background: "transparent", border: "none", padding: "4px", cursor: "pointer", color: iconColor }}
+          >
+            {gs.isFullscreen ? <FullscreenExit size={20} /> : <Fullscreen size={20} />}
+          </button>
+        </div>
+      </div>
+
+      {/* DataEditor container */}
       <div
         style={{
           width: "100%",
-          height: "auto",
-          overflow: "hidden", // Clip grid corners
-          borderRadius: "8px", // Rounded corners
-          boxShadow:
-            theme === darkTheme
-              ? "0 0 0 1px #444" // Subtle outline in dark mode
-              : "0 0 0 1px #dadce0", // Subtle outline in light mode
+          height: gs.isFullscreen ? "100vh" : "auto",
+          position: gs.isFullscreen ? "fixed" : "relative",
+          top: gs.isFullscreen ? 0 : "auto",
+          left: gs.isFullscreen ? 0 : "auto",
+          right: gs.isFullscreen ? 0 : "auto",
+          bottom: gs.isFullscreen ? 0 : "auto",
+          zIndex: gs.isFullscreen ? 999 : undefined,
+          backgroundColor: gs.isFullscreen
+            ? theme === darkTheme
+              ? "#1e1e1e"
+              : "#ffffff"
+            : "transparent",
+          padding: gs.isFullscreen ? "60px 20px 20px 20px" : 0,
+          borderRadius: "12px",
+          overflow: "hidden",
         }}
       >
         <DataEditor
           getCellContent={getCellContent}
-          columns={columns}
+          columns={displayColumns}
           rows={filteredRowCount}
           width="100%"
-          height={calculateGridHeight()}
-          smoothScrollX={false}
-          smoothScrollY={false}
+          height={gs.isFullscreen ? "calc(100vh - 80px)" : calcHeight()}
+          maxColumnAutoWidth={500}
+          maxColumnWidth={2000}
+          minColumnWidth={20}
+          scaleToRem
           theme={theme}
+          experimental={{
+            disableMinimumCellWidth: true,
+          }}
           customRenderers={customRenderers}
-          getCellsForSelection={true}
-          gridSelection={selection}
-          onGridSelectionChange={setSelection}
-          onCellEdited={onCellEdited}
-          onColumnResize={onColumnResize}
-          onRowAppended={onRowAppended}
-          onItemHovered={onItemHovered}
+          drawCell={drawCell}
           getRowThemeOverride={getRowThemeOverride}
-          headerIcons={headerIcons}
-          validateCell={validateCell}
+          gridSelection={gs.selection}  
+          onGridSelectionChange={onGridSelectionChange}
+          freezeColumns={pinnedColumns.length}
+          onRowAppended={() => gs.setNumRows((n) => n + 1)}
+          onColumnResize={onColumnResize}
+          onCellEdited={undoOnCellEdited}
+          onItemHovered={(args) => {
+            const loc = args.location;
+            if (!loc) return;
+            const [, r] = loc;
+            gs.setHoverRow(r >= 0 ? r : undefined);
+            onTooltipHover(args);
+          }}
           rowMarkers="both"
           rowSelect="multi"
-          rowSelection={rowSelection}
-          onRowSelectionChange={setRowSelection}
-          searchValue={searchValue}
-          onSearchValueChange={setSearchValue}
-          showSearch={showSearch}
-          onSearchClose={() => {
-            setShowSearch(false);
-            setSearchValue("");
+          rowSelectionMode="multi"
+          searchValue={gs.searchValue}
+          onSearchValueChange={gs.setSearchValue}
+          showSearch={gs.showSearch}
+          onSearchClose={() => gs.setShowSearch(false)}
+          onHeaderMenuClick={(colIdx: number, bounds: { x: number; y: number; width: number; height: number }) => {
+            const column = displayColumns[colIdx] as BaseColumnProps;
+            if (column) {
+              columnMenu.openMenu(column, bounds.x + bounds.width, bounds.y + bounds.height);
+            }
           }}
-          searchResults={[]} // Could implement specific search result highlighting here
+          ref={dataEditorRef}
+          rowHeight={rowHeight}
+          headerHeight={headerHeight}
         />
       </div>
+
+      <Tooltip
+        content={tooltipData.content}
+        x={tooltipData.x}
+        y={tooltipData.y}
+        visible={tooltipData.visible}
+      />
+
+      {/* Column Menu */}
+      {columnMenu.menuState.isOpen && columnMenu.menuState.column && (
+        <ColumnMenu
+          column={columnMenu.menuState.column}
+          position={columnMenu.menuState.position}
+          onClose={columnMenu.closeMenu}
+          onSort={handleSort}
+          onPin={handlePin}
+          onUnpin={handleUnpin}
+          onHide={handleHide}
+          onAutosize={handleAutosize}
+          onChangeFormat={columnMenu.changeFormat}
+          isPinned={columnMenu.getPinnedSide(columnMenu.menuState.column.id)}
+          sortDirection={sortState?.columnId === columnMenu.menuState.column.id ? sortState.direction : null}
+          isDarkTheme={theme === darkTheme}
+        />
+      )}
     </div>
   );
-} 
+}
