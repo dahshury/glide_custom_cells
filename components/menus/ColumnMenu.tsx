@@ -145,8 +145,8 @@ export function ColumnMenu({
   const menuLeft = leftOverflow ? Math.max(position.x - MENU_WIDTH, 8) : position.x;
 
   const calcSubmenuLeft = (base: number) => {
-    if (leftOverflow) return base - SUBMENU_WIDTH;
-    return base + MENU_WIDTH;
+    if (leftOverflow) return base - SUBMENU_WIDTH + 10; // Overlap when on left
+    return base + MENU_WIDTH - 18; // 2px closer overlap
   };
 
   const bgColor = isDarkTheme ? "#2a2a2a" : "white";
@@ -163,12 +163,14 @@ export function ColumnMenu({
         top: position.y,
         left: menuLeft,
         backgroundColor: bgColor,
-        border: `1px solid ${borderColor}`,
+        border: `0.5px solid ${isDarkTheme ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
         borderRadius: "6px",
         boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
         minWidth: "200px",
         zIndex: 1000,
         padding: "4px 0",
+        animation: "menuSlideIn 150ms ease-out",
+        transformOrigin: "top left",
       }}
     >
       {onSort && (
@@ -193,7 +195,8 @@ export function ColumnMenu({
         </>
       )}
 
-      {onChangeFormat && (column.id === "number" || (column.title && column.title.toLowerCase().includes("number"))) && (
+      {onChangeFormat && (column.id === "number" || column.id === "date" || column.id === "time" || 
+        (column.title && (column.title.toLowerCase().includes("number") || column.title.toLowerCase().includes("date") || column.title.toLowerCase().includes("time")))) && (
         <div
           onMouseEnter={handleFormatMenuEnter}
           onMouseLeave={handleFormatMenuLeave}
@@ -214,16 +217,19 @@ export function ColumnMenu({
                 onMouseLeave={handleFormatMenuLeave}
                 style={{
                   position: "fixed",
-                  top: position.y,
-                  left: leftOverflow ? menuLeft - 12 : menuLeft + MENU_WIDTH - 4,
-                  width: 12,
-                  height: 220,
+                  top: position.y + (onSort ? 73 : 4),
+                  left: leftOverflow ? menuLeft - SUBMENU_WIDTH - 4 : menuLeft + MENU_WIDTH - 8,
+                  width: leftOverflow ? SUBMENU_WIDTH + 4 : 8,
+                  height: 32, // Height of menu item
                   zIndex: 999,
                 }}
               />
               <FormattingMenu
                 column={column}
-                position={{ x: calcSubmenuLeft(menuLeft), y: position.y }}
+                position={{ 
+                  x: calcSubmenuLeft(menuLeft), 
+                  y: position.y + (onSort ? 73 : 4) // Sort: 2 items (32px each) + divider (5px) + top padding (4px)
+                }}
                 onFormatChange={handleFormatChange}
                 onClose={() => setFormatMenuOpen(false)}
                 isDarkTheme={isDarkTheme}

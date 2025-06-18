@@ -72,14 +72,14 @@ const NUMBER_FORMATS: FormatOption[] = [
 
 const DATETIME_FORMATS: FormatOption[] = [
   {
-    format: "automatic",
-    label: "Automatic",
-    icon: <Schedule size={16} />,
-  },
-  {
     format: "localized",
     label: "Localized",
     icon: <Translate size={16} />,
+  },
+  {
+    format: "automatic",
+    label: "Automatic",
+    icon: <Schedule size={16} />,
   },
   {
     format: "distance",
@@ -95,14 +95,14 @@ const DATETIME_FORMATS: FormatOption[] = [
 
 const DATE_FORMATS: FormatOption[] = [
   {
-    format: "automatic",
-    label: "Automatic",
-    icon: <Schedule size={16} />,
-  },
-  {
     format: "localized",
     label: "Localized",
     icon: <Translate size={16} />,
+  },
+  {
+    format: "automatic",
+    label: "Automatic",
+    icon: <Schedule size={16} />,
   },
   {
     format: "distance",
@@ -113,14 +113,14 @@ const DATE_FORMATS: FormatOption[] = [
 
 const TIME_FORMATS: FormatOption[] = [
   {
-    format: "automatic",
-    label: "Automatic",
-    icon: <Schedule size={16} />,
-  },
-  {
     format: "localized",
     label: "Localized",
     icon: <Translate size={16} />,
+  },
+  {
+    format: "automatic",
+    label: "Automatic",
+    icon: <Schedule size={16} />,
   },
 ];
 
@@ -213,12 +213,14 @@ export function FormattingMenu({
         top: position.y,
         left: position.x,
         backgroundColor: bgColor,
-        border: `1px solid ${borderColor}`,
+        border: `0.5px solid ${isDarkTheme ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)"}`,
         borderRadius: "6px",
         boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
         minWidth: "180px",
         zIndex: 1001,
         padding: "4px 0",
+        animation: "submenuSlideIn 150ms ease-out",
+        transformOrigin: position.x < 500 ? "top right" : "top left",
       }}
     >
       {formats.map((formatOption) => (

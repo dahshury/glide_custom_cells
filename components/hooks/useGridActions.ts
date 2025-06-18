@@ -18,7 +18,8 @@ export function useGridActions(
     setColumns: React.Dispatch<React.SetStateAction<GridColumn[]>>,
     hiddenColumns: Set<number>
 ) {
-    const hasSelection = selection.rows.toArray().length > 0 || selection.columns.toArray().length > 0;
+    // Only consider row selections for hasSelection (used for delete button)
+    const hasSelection = selection.rows.toArray().length > 0;
 
     const handleDeleteRows = React.useCallback(() => {
         const rowsToDelete = new Set<number>();

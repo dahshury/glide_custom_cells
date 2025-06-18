@@ -5,6 +5,7 @@ import TempusDateCellRenderer, { type TempusDateCell } from "../TempusDominusDat
 import PhoneInputCellRenderer, { type PhoneInputCell } from "../PhoneInputCell";
 import { Theme } from "@glideapps/glide-data-grid";
 import { EditingState } from "../models/EditingState";
+import { FormattingService } from "../services/FormattingService";
 
 const validateNameField = (text: string): { isValid: boolean; correctedValue?: string; errorMessage?: string } => {
     if (!text || text.trim() === "") {
@@ -131,7 +132,7 @@ const formatNumber = (value: number, format?: string): string => {
     }
 };
 
-function getInitialCell(col: number, row: number, theme: Partial<Theme>, darkTheme: Partial<Theme>, columnFormats?: Record<string, string>): GridCell {
+function getInitialCell(col: number, row: number, theme: Partial<Theme>, darkTheme: Partial<Theme>, columnFormats?: Record<string, string>, columnId?: string): GridCell {
     const data = generateSampleData(row, col);
 
     switch (col) {
@@ -154,7 +155,7 @@ function getInitialCell(col: number, row: number, theme: Partial<Theme>, darkThe
                 allowOverlay: true,
             } as any;
         case 2: // Number (Amount)
-            const format = columnFormats?.["number"] || "number";
+            const format = columnFormats?.[columnId || "number"] || columnFormats?.["number"] || "number";
             return {
                 kind: GridCellKind.Number,
                 data: data,
@@ -162,29 +163,37 @@ function getInitialCell(col: number, row: number, theme: Partial<Theme>, darkThe
                 allowOverlay: true,
             };
         case 3: // Date Picker (Date)
+            const dateFormat = columnFormats?.[columnId || "date"] || columnFormats?.["date"];
+            const formattedDate = dateFormat && data instanceof Date 
+                ? FormattingService.formatValue(data, "date", dateFormat) 
+                : (data instanceof Date ? data.toLocaleDateString() : "");
             return {
                 kind: GridCellKind.Custom,
                 data: {
                     kind: "tempus-date-cell",
                     format: "date",
                     date: data,
-                    displayDate: data instanceof Date ? data.toLocaleDateString() : "",
+                    displayDate: formattedDate,
                     isDarkTheme: theme === darkTheme,
                 },
-                copyData: data instanceof Date ? data.toLocaleDateString() : "",
+                copyData: formattedDate,
                 allowOverlay: true,
             } as TempusDateCell;
         case 4: // Time Picker (Time)
+            const timeFormat = columnFormats?.[columnId || "time"] || columnFormats?.["time"];
+            const formattedTime = timeFormat && data instanceof Date 
+                ? FormattingService.formatValue(data, "time", timeFormat) 
+                : (data instanceof Date ? data.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "");
             return {
                 kind: GridCellKind.Custom,
                 data: {
                     kind: "tempus-date-cell",
                     format: "time",
                     date: data,
-                    displayDate: data instanceof Date ? data.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "",
+                    displayDate: formattedTime,
                     isDarkTheme: theme === darkTheme,
                 },
-                copyData: data instanceof Date ? data.toLocaleTimeString() : "",
+                copyData: formattedTime,
                 allowOverlay: true,
             } as TempusDateCell;
         case 5: // Phone
@@ -209,7 +218,7 @@ function getInitialCell(col: number, row: number, theme: Partial<Theme>, darkThe
     }
 }
 
-export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme>, darkTheme: Partial<Theme>, initialNumRows: number, columnFormats?: Record<string, string>) {
+export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme>, darkTheme: Partial<Theme>, initialNumRows: number, columnFormats?: Record<string, string>, columns?: any[]) {
     const editingState = React.useRef(new EditingState(initialNumRows));
 
     const getRawCellContent = React.useCallback((col: number, row: number): GridCell => {
@@ -219,10 +228,49 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
             if (storedCell.kind === GridCellKind.Number) {
                 // @ts-ignore – data property exists for number cell types
                 const raw = (storedCell as any).data;
-                const format = columnFormats?.["number"] || "number";
+                const columnId = columns?.[col]?.id;
+                const format = columnFormats?.[columnId || "number"] || columnFormats?.["number"] || "number";
                 const formatted = raw !== undefined && raw !== null ? formatNumber(raw, format) : "";
                 // @ts-ignore
                 storedCell.displayData = formatted;
+            }
+            
+            // Update date/time cell formatting
+            if (storedCell.kind === GridCellKind.Custom && (storedCell as any).data?.kind === "tempus-date-cell") {
+                const cellData = (storedCell as any).data;
+                const date = cellData.date;
+                if (date instanceof Date) {
+                    const columnId = columns?.[col]?.id;
+                    let format: string | undefined;
+                    let columnType: string;
+                    
+                    if (cellData.format === "date") {
+                        format = columnFormats?.[columnId || "date"] || columnFormats?.["date"];
+                        columnType = "date";
+                    } else if (cellData.format === "time") {
+                        format = columnFormats?.[columnId || "time"] || columnFormats?.["time"];
+                        columnType = "time";
+                    } else {
+                        format = columnFormats?.[columnId || "datetime"] || columnFormats?.["datetime"];
+                        columnType = "datetime";
+                    }
+                    
+                    if (format) {
+                        const formattedValue = FormattingService.formatValue(date, columnType, format);
+                        cellData.displayDate = formattedValue;
+                        (storedCell as any).copyData = formattedValue;
+                    } else {
+                        // Use default formatting
+                        if (cellData.format === "date") {
+                            cellData.displayDate = date.toLocaleDateString();
+                        } else if (cellData.format === "time") {
+                            cellData.displayDate = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        } else {
+                            cellData.displayDate = date.toLocaleString();
+                        }
+                        (storedCell as any).copyData = cellData.displayDate;
+                    }
+                }
             }
             
             // Update missing value flag and validation for required columns
@@ -245,11 +293,12 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
             
             return storedCell;
         }
-        const cell = getInitialCell(col, row, theme, darkTheme, columnFormats);
+        const columnId = columns?.[col]?.id;
+        const cell = getInitialCell(col, row, theme, darkTheme, columnFormats, columnId);
         if (cell.kind === GridCellKind.Number) {
             // @ts-ignore
             const raw = (cell as any).data;
-            const format = columnFormats?.["number"] || "number";
+            const format = columnFormats?.[columnId || "number"] || columnFormats?.["number"] || "number";
             // @ts-ignore
             cell.displayData = raw !== undefined && raw !== null ? formatNumber(raw, format) : "";
         }
@@ -272,7 +321,7 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
             }
         }
         return cell;
-    }, [theme, darkTheme, columnFormats]);
+    }, [theme, darkTheme, columnFormats, columns]);
 
     const normalizeEditedCell = (cell: EditableGridCell, col?: number): GridCell => {
         // Ensure essential props like displayData are present so the grid renders the updated value immediately
@@ -300,8 +349,7 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
                     allowOverlay: true,
                     ...(hasError && { 
                         themeOverride: { textColor: "#ef4444" },
-                        hoverEffect: false,
-                        cursor: "not-allowed"
+                        hoverEffect: false
                     }),
                     ...(col === 0 && hasError && { 
                         isMissingValue: true,
@@ -311,7 +359,8 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
             }
             case GridCellKind.Number: {
                 const num = (cell as any).data ?? 0;
-                const format = columnFormats?.["number"] || "number";
+                const columnId = columns?.[col || 0]?.id;
+                const format = columnFormats?.[columnId || "number"] || columnFormats?.["number"] || "number";
                 return {
                     kind: GridCellKind.Number,
                     data: num,
@@ -319,8 +368,53 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
                     allowOverlay: true,
                 } as GridCell;
             }
+            case GridCellKind.Custom: {
+                // Handle date/time cells
+                if ((cell as any).data?.kind === "tempus-date-cell") {
+                    const cellData = (cell as any).data;
+                    const date = cellData.date;
+                    if (date instanceof Date) {
+                        const columnId = columns?.[col || 0]?.id;
+                        let format: string | undefined;
+                        let columnType: string;
+                        
+                        if (cellData.format === "date") {
+                            format = columnFormats?.[columnId || "date"] || columnFormats?.["date"];
+                            columnType = "date";
+                        } else if (cellData.format === "time") {
+                            format = columnFormats?.[columnId || "time"] || columnFormats?.["time"];
+                            columnType = "time";
+                        } else {
+                            format = columnFormats?.[columnId || "datetime"] || columnFormats?.["datetime"];
+                            columnType = "datetime";
+                        }
+                        
+                        let formattedValue: string;
+                        if (format) {
+                            formattedValue = FormattingService.formatValue(date, columnType, format);
+                        } else {
+                            // Use default formatting
+                            if (cellData.format === "date") {
+                                formattedValue = date.toLocaleDateString();
+                            } else if (cellData.format === "time") {
+                                formattedValue = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            } else {
+                                formattedValue = date.toLocaleString();
+                            }
+                        }
+                        
+                        cellData.displayDate = formattedValue;
+                        return {
+                            ...cell,
+                            data: cellData,
+                            copyData: formattedValue,
+                        } as unknown as GridCell;
+                    }
+                }
+                return cell as unknown as GridCell;
+            }
             default:
-                // For custom cells or others, assume full data provided
+                // For other cells, assume full data provided
                 return cell as unknown as GridCell;
         }
     };
@@ -334,7 +428,7 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
             const normalized = normalizeEditedCell(newValue, actualCol);
             editingState.current.setCell(actualCol, actualRow, normalized);
         }
-    }, [visibleColumnIndices]);
+    }, [visibleColumnIndices, columnFormats, columns]);
 
     const getCellContent = React.useCallback((visibleRows: readonly number[]) => (cell: Item): GridCell => {
         const [displayCol, displayRow] = cell;
