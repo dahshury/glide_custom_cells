@@ -44,6 +44,7 @@ export default function Grid() {
   const [gridKey, setGridKey] = React.useState(0); // Force re-render after loading state
   const [isStateLoaded, setIsStateLoaded] = React.useState(false);
   const [isInitializing, setIsInitializing] = React.useState(true);
+  const [isDataReady, setIsDataReady] = React.useState(false);
   
   // Reset toolbar hover state when fullscreen changes
   React.useEffect(() => {
@@ -125,21 +126,35 @@ export default function Grid() {
     gs.setHiddenColumns,
     isInitializing
   );
+  
+  // Check if there's persisted state
+  const hasPersistedState = React.useMemo(() => {
+    return localStorage.getItem("gridState") !== null;
+  }, []);
 
   // Load persisted state on first render
   React.useEffect(() => {
     if (!isStateLoaded && columnsState.length > 0) {
-      loadState();
-      // Clear any cached data to ensure fresh load
-      dataProvider.refresh().then(() => {
-        // Force grid to re-render after loading state
-        setGridKey(prev => prev + 1);
+      if (hasPersistedState) {
+        // Load persisted state
+        loadState();
+        // Clear any cached data to ensure fresh load
+        dataProvider.refresh().then(() => {
+          // Force grid to re-render after loading state
+          setGridKey(prev => prev + 1);
+          setIsStateLoaded(true);
+          setIsDataReady(true);
+          // Allow saving after initial load is complete
+          setTimeout(() => setIsInitializing(false), 100);
+        });
+      } else {
+        // No persisted state, mark as ready immediately
         setIsStateLoaded(true);
-        // Allow saving after initial load is complete
-        setTimeout(() => setIsInitializing(false), 100);
-      });
+        setIsDataReady(true);
+        setIsInitializing(false);
+      }
     }
-  }, [loadState, dataProvider, isStateLoaded, columnsState.length]);
+  }, [loadState, dataProvider, isStateLoaded, columnsState.length, hasPersistedState]);
 
   // Update the grid state to use data source row count
   React.useEffect(() => {
@@ -299,6 +314,51 @@ export default function Grid() {
     togglePin,
     dataEditorRef,
   });
+
+  // Don't render until data is ready
+  if (!isDataReady || columnsState.length === 0) {
+    return (
+      <FullscreenWrapper theme={theme} darkTheme={darkTheme}>
+        <div style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: "400px",
+          background: theme === darkTheme ? "#111827" : "#f9fafb"
+        }}>
+          <div style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "16px"
+          }}>
+            <div style={{
+              width: "40px",
+              height: "40px",
+              border: `3px solid ${theme === darkTheme ? "#374151" : "#e5e7eb"}`,
+              borderTopColor: theme === darkTheme ? "#60a5fa" : "#3b82f6",
+              borderRadius: "50%",
+              animation: "spin 1s linear infinite"
+            }} />
+            <div style={{
+              fontSize: "14px",
+              color: theme === darkTheme ? "#9ca3af" : "#6b7280",
+              fontFamily: "inherit"
+            }}>
+              Loading grid...
+            </div>
+          </div>
+        </div>
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </FullscreenWrapper>
+    );
+  }
 
     return (
     <FullscreenWrapper 
