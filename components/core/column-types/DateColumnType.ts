@@ -100,7 +100,7 @@ export class DateColumnType implements IColumnType {
       return FormattingService.formatValue(date, "date", formatting.pattern);
     }
 
-    return date.toLocaleDateString(formatting?.locale);
+    return date.toLocaleDateString(formatting?.locale || 'en-GB');
   }
 
   parseValue(input: any, column: IColumnDefinition): any {

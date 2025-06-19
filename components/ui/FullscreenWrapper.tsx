@@ -1,18 +1,19 @@
 import React from "react";
+import { useFullscreen } from "../contexts/FullscreenContext";
 
 interface FullscreenWrapperProps {
-  isFullscreen: boolean;
   theme: any;
   darkTheme: any;
   children: React.ReactNode;
 }
 
 export const FullscreenWrapper: React.FC<FullscreenWrapperProps> = ({
-  isFullscreen,
   theme,
   darkTheme,
   children,
 }) => {
+  const { isFullscreen } = useFullscreen();
+
   if (!isFullscreen) {
     return <>{children}</>;
   }

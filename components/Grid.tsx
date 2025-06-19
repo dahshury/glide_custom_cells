@@ -29,6 +29,8 @@ import { useUndoRedo } from "./hooks/useUndoRedo";
 import { useGridDataOperations } from "./hooks/useGridDataOperations";
 import { useColumnOperations } from "./hooks/useColumnOperations";
 import { InMemoryDataSource } from "./core/data-sources/InMemoryDataSource";
+import { useFullscreen } from "./contexts/FullscreenContext";
+import { useGridPersistence } from "./hooks/useGridPersistence";
 
 export default function Grid() {
   // Initialize the data source
@@ -38,32 +40,20 @@ export default function Grid() {
   const gs = useGridState();
   const { theme, setTheme, darkTheme, lightTheme, iconColor } = useGridTheme();
   const [isToolbarHovered, setIsToolbarHovered] = React.useState(false);
+  const { isFullscreen, toggleFullscreen } = useFullscreen();
+  const [gridKey, setGridKey] = React.useState(0); // Force re-render after loading state
+  const [isStateLoaded, setIsStateLoaded] = React.useState(false);
+  const [isInitializing, setIsInitializing] = React.useState(true);
   
   // Reset toolbar hover state when fullscreen changes
   React.useEffect(() => {
     setIsToolbarHovered(false);
-  }, [gs.isFullscreen]);
+  }, [isFullscreen]);
 
-  // Handle ESC key to exit fullscreen
+  // Sync legacy grid state with new fullscreen context
   React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && gs.isFullscreen) {
-        gs.setIsFullscreen(false);
-      }
-    };
-
-    if (gs.isFullscreen) {
-      document.addEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "unset";
-    };
-  }, [gs.isFullscreen, gs]);
+    gs.setIsFullscreen(isFullscreen);
+  }, [isFullscreen]);
 
   // Add menu animations
   React.useEffect(() => {
@@ -123,7 +113,33 @@ export default function Grid() {
     columnMenu.columnFormats
   );
 
+  // Get the editing state reference after dataProvider is created
+  const editingState = React.useMemo(() => dataProvider.getEditingState(), [dataProvider]);
 
+  // Integrate state persistence using localStorage
+  const { saveState, loadState } = useGridPersistence(
+    editingState,
+    columnsState,
+    setColumns,
+    gs.hiddenColumns,
+    gs.setHiddenColumns,
+    isInitializing
+  );
+
+  // Load persisted state on first render
+  React.useEffect(() => {
+    if (!isStateLoaded && columnsState.length > 0) {
+      loadState();
+      // Clear any cached data to ensure fresh load
+      dataProvider.refresh().then(() => {
+        // Force grid to re-render after loading state
+        setGridKey(prev => prev + 1);
+        setIsStateLoaded(true);
+        // Allow saving after initial load is complete
+        setTimeout(() => setIsInitializing(false), 100);
+      });
+    }
+  }, [loadState, dataProvider, isStateLoaded, columnsState.length]);
 
   // Update the grid state to use data source row count
   React.useEffect(() => {
@@ -181,8 +197,12 @@ export default function Grid() {
   );
 
   const onCellEdited = React.useCallback(
-    (cell: Item, newVal: any) => baseOnCellEdited(filteredRows)(cell, newVal),
-    [filteredRows, baseOnCellEdited]
+    (cell: Item, newVal: any) => {
+      baseOnCellEdited(filteredRows)(cell, newVal);
+      // Save state after each edit
+      saveState();
+    },
+    [filteredRows, baseOnCellEdited, saveState]
   );
 
   const {
@@ -219,7 +239,7 @@ export default function Grid() {
   );
 
   useGridEvents(gs.setShowSearch);
-  useGridLifecycle(gs.isFullscreen, gs.showColumnMenu, gs.setShowColumnMenu);
+  useGridLifecycle(isFullscreen, gs.showColumnMenu, gs.setShowColumnMenu);
 
   const handleHide = React.useCallback((columnId: string) => {
     const idx = columns.findIndex(c => c.id === columnId);
@@ -249,7 +269,8 @@ export default function Grid() {
     
     clearSelection();
     await dataProvider.refresh();
-  }, [gs.selection.rows, filteredRows, dataProvider, clearSelection]);
+    saveState();
+  }, [gs.selection.rows, filteredRows, dataProvider, clearSelection, saveState]);
 
   const handleItemHovered = React.useCallback((args: any) => {
     const loc = args.location;
@@ -281,30 +302,29 @@ export default function Grid() {
 
     return (
     <FullscreenWrapper 
-      isFullscreen={gs.isFullscreen} 
       theme={theme} 
       darkTheme={darkTheme}
     >
       <div
         style={{
           width: "100%",
-          height: gs.isFullscreen ? "100%" : "100%",
+          height: isFullscreen ? "100%" : "100%",
           position: "relative",
           borderRadius: "12px",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
-          alignItems: gs.isFullscreen ? undefined : "center",
-          flex: gs.isFullscreen ? 1 : undefined,
-          border: gs.isFullscreen 
+          alignItems: isFullscreen ? undefined : "center",
+          flex: isFullscreen ? 1 : undefined,
+          border: isFullscreen 
             ? "none"
             : undefined,
-          boxShadow: gs.isFullscreen
+          boxShadow: isFullscreen
             ? "none"
             : undefined,
         }}
       >
-        {!gs.isFullscreen && (
+        {!isFullscreen && (
           <GridThemeToggle
             currentTheme={theme}
             lightTheme={lightTheme}
@@ -333,7 +353,6 @@ export default function Grid() {
           overflow: "hidden",
         }}>
           <GridToolbar
-            isFullscreen={gs.isFullscreen}
             isFocused={gs.isFocused || isToolbarHovered}
             hasSelection={actions.hasSelection}
             canUndo={canUndo}
@@ -350,16 +369,18 @@ export default function Grid() {
               await dataProvider.addRow();
               gs.setNumRows(dataSource.rowCount);
               await dataProvider.refresh();
+              saveState();
             }}
             onToggleColumnVisibility={actions.handleToggleColumnVisibility}
             onDownloadCsv={actions.handleDownloadCsv}
             onToggleSearch={() => gs.setShowSearch((v) => !v)}
-            onToggleFullscreen={() => gs.setIsFullscreen((v) => !v)}
+            onToggleFullscreen={toggleFullscreen}
             onMouseEnter={() => setIsToolbarHovered(true)}
             onMouseLeave={() => setIsToolbarHovered(false)}
           />
 
           <GridDataEditor
+        key={gridKey}
         displayColumns={displayColumns}
         filteredRows={filteredRows}
         filteredRowCount={filteredRowCount}
@@ -390,7 +411,6 @@ export default function Grid() {
         }}
         theme={theme}
         darkTheme={darkTheme}
-        isFullscreen={gs.isFullscreen}
         hoverRow={gs.hoverRow}
         dataEditorRef={dataEditorRef}
         onMouseEnter={() => gs.setIsFocused(true)}

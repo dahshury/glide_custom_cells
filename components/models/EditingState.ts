@@ -34,6 +34,12 @@ export class EditingState {
   }
 
   toJson(columns: BaseColumnProps[]): string {
+    console.log("EditingState.toJson called:", {
+      columnsLength: columns.length,
+      editedCellsSize: this.editedCells.size,
+      addedRowsLength: this.addedRows.length
+    });
+    
     const columnsByIndex = new Map<number, BaseColumnProps>();
     columns.forEach(column => {
       columnsByIndex.set(column.indexNumber, column);
@@ -47,13 +53,18 @@ export class EditingState {
 
     this.editedCells.forEach((row: Map<number, GridCell>, rowIndex: number) => {
       const editedRow: Record<string, any> = {};
+      console.log(`Processing row ${rowIndex} with ${row.size} cells`);
       row.forEach((cell: GridCell, colIndex: number) => {
         const column = columnsByIndex.get(colIndex);
+        console.log(`  Cell at col ${colIndex}:`, { column: column?.name, cellKind: cell.kind, cellData: (cell as any).data });
         if (column) {
           editedRow[getColumnName(column)] = this.getCellValue(cell, column);
         }
       });
       currentState.edited_rows[rowIndex] = editedRow;
+      if (Object.keys(editedRow).length === 0) {
+        console.warn(`Row ${rowIndex} has no edited cells but is in editedCells map`);
+      }
     });
 
     this.addedRows.forEach((row: Map<number, GridCell>) => {
@@ -92,6 +103,12 @@ export class EditingState {
   }
 
   fromJson(editingStateJson: string, columns: BaseColumnProps[]): void {
+    console.log("EditingState.fromJson called with:", { 
+      editingStateJson, 
+      columnsLength: columns.length,
+      columns: columns.map(c => ({ id: c.id, name: c.name }))
+    });
+    
     this.editedCells = new Map();
     this.addedRows = [];
     this.deletedRows = [];
@@ -122,6 +139,8 @@ export class EditingState {
             }
             this.editedCells.get(rowIndex)?.set(column.indexNumber, cell);
           }
+        } else {
+          console.warn(`Column not found for name: ${colName}`);
         }
       });
     });
@@ -167,8 +186,8 @@ export class EditingState {
   setCell(col: number, row: number, cell: GridCell): void {
     if (this.isAddedRow(row)) {
       const addedRowIndex = row - this.numRows;
-      if (!this.addedRows[addedRowIndex]) {
-        this.addedRows[addedRowIndex] = new Map();
+      if (addedRowIndex >= this.addedRows.length) {
+        return;
       }
       this.addedRows[addedRowIndex].set(col, cell);
     } else {
@@ -184,18 +203,30 @@ export class EditingState {
   }
 
   deleteRows(rows: number[]): void {
-    rows.forEach(row => this.deleteRow(row));
+    rows
+      .sort((a, b) => b - a)
+      .forEach(row => {
+        this.deleteRow(row);
+      });
   }
 
   deleteRow(row: number): void {
+    if (isNullOrUndefined(row) || row < 0) {
+      return;
+    }
+
     if (this.isAddedRow(row)) {
       const addedRowIndex = row - this.numRows;
       this.addedRows.splice(addedRowIndex, 1);
-    } else {
-      if (!this.deletedRows.includes(row)) {
-        this.deletedRows.push(row);
-      }
+      return;
     }
+
+    if (!this.deletedRows.includes(row)) {
+      this.deletedRows.push(row);
+      this.deletedRows = this.deletedRows.sort((a, b) => a - b);
+    }
+
+    this.editedCells.delete(row);
   }
 
   getOriginalRowIndex(row: number): number {
@@ -203,14 +234,15 @@ export class EditingState {
       return -1;
     }
     
-    let deletedBeforeRow = 0;
-    for (const deletedRow of this.deletedRows) {
-      if (deletedRow < row) {
-        deletedBeforeRow++;
+    let originalIndex = row;
+    for (let i = 0; i < this.deletedRows.length; i++) {
+      if (this.deletedRows[i] > originalIndex) {
+        break;
       }
+      originalIndex += 1;
     }
     
-    return row + deletedBeforeRow;
+    return originalIndex;
   }
 
   getNumRows(): number {
@@ -258,16 +290,48 @@ export class EditingState {
   }
 
   private createCell(value: any, column: BaseColumnProps): GridCell | null {
-    if (column.id === "text" || column.name.toLowerCase().includes("text")) {
+    // Specialized handling for date and time columns so they render using TempusDominus cells
+    const lowerId = column.id.toLowerCase();
+    const lowerName = column.name.toLowerCase();
+
+    // DATE
+    if (lowerId.includes("date") || lowerName.includes("date")) {
+      const dateObj = value ? new Date(value) : null;
+      const displayDate = dateObj && !isNaN(dateObj.getTime()) ? dateObj.toLocaleDateString("en-GB") : "";
       return {
-        kind: GridCellKind.Text,
-        data: value || "",
-        displayData: value || "",
+        kind: GridCellKind.Custom,
+        data: {
+          kind: "tempus-date-cell",
+          format: "date",
+          date: dateObj,
+          displayDate,
+          isDarkTheme: false,
+        },
+        copyData: displayDate,
         allowOverlay: true,
-      };
+      } as any;
     }
-    
-    if (column.id === "number" || column.name.toLowerCase().includes("number")) {
+
+    // TIME
+    if (lowerId.includes("time") || lowerName.includes("time")) {
+      const dateObj = value ? new Date(value) : null;
+      const displayTime = dateObj && !isNaN(dateObj.getTime()) ? dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : "";
+      return {
+        kind: GridCellKind.Custom,
+        data: {
+          kind: "tempus-date-cell",
+          format: "time",
+          date: dateObj,
+          displayDate: displayTime,
+          isDarkTheme: false,
+        },
+        copyData: displayTime,
+        allowOverlay: true,
+      } as any;
+    }
+
+    // NUMBER
+    if (lowerId.includes("number") || lowerName.includes("number")) {
       const numValue = value !== null && value !== undefined ? Number(value) : 0;
       return {
         kind: GridCellKind.Number,
@@ -276,8 +340,9 @@ export class EditingState {
         allowOverlay: true,
       };
     }
-    
-    if (column.id === "boolean" || column.name.toLowerCase().includes("boolean")) {
+
+    // BOOLEAN
+    if (lowerId.includes("boolean") || lowerName.includes("boolean")) {
       return {
         kind: GridCellKind.Boolean,
         data: Boolean(value),
@@ -285,11 +350,16 @@ export class EditingState {
       };
     }
 
+    // TEXT fallback
     return {
       kind: GridCellKind.Text,
       data: value || "",
       displayData: value?.toString() || "",
       allowOverlay: true,
     };
+  }
+
+  getDeletedRows(): number[] {
+    return [...this.deletedRows];
   }
 } 

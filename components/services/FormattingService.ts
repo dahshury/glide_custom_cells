@@ -87,7 +87,7 @@ export class FormattingService {
       case "distance":
         return this.formatRelativeTime(date);
       default:
-        return date.toLocaleDateString();
+        return date.toLocaleDateString('en-GB');
     }
   }
 

@@ -133,16 +133,31 @@ export class DataProvider implements IDataProvider {
 
   public async addRow(): Promise<number> {
     const newRowIndex = await this.dataSource.addRow();
-    this.editingState = new EditingState(this.dataSource.rowCount);
+    // Ensure editingState is aware of new row count without losing existing edits
+    // We add an empty row entry to maintain consistency
+    const rowCells = new Map<number, GridCell>();
+    this.columnDefinitions.forEach((col, idx) => {
+      const columnType = this.columnTypeRegistry.get(col.dataType);
+      if (columnType) {
+        const cell = columnType.createCell(null, col, this.theme, this.isDarkTheme);
+        rowCells.set(idx, cell);
+      }
+    });
+    this.editingState.addRow(rowCells);
     return newRowIndex;
   }
 
   public async deleteRow(row: number): Promise<boolean> {
-    return this.dataSource.deleteRow(row);
+    const success = await this.dataSource.deleteRow(row);
+    if (success) {
+      this.editingState.deleteRow(row);
+    }
+    return success;
   }
 
   public getDeletedRows(): Set<number> {
-    return this.dataSource.getDeletedRows();
+    const combined = new Set<number>([...this.dataSource.getDeletedRows(), ...this.editingState.getDeletedRows()]);
+    return combined;
   }
 
   private createEmptyCell(): GridCell {
@@ -168,5 +183,9 @@ export class DataProvider implements IDataProvider {
         type: format
       }
     };
+  }
+
+  public getEditingState(): EditingState {
+    return this.editingState;
   }
 } 

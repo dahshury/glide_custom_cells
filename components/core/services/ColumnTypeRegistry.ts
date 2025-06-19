@@ -15,10 +15,10 @@ export class ColumnTypeRegistry implements IColumnTypeRegistry {
   }
 
   public register(columnType: IColumnType): void {
-    if (this.columnTypes.has(columnType.dataType)) {
-      console.warn(`Column type ${columnType.dataType} is already registered. Overwriting...`);
+    // Only register if not already registered to prevent warnings in development
+    if (!this.columnTypes.has(columnType.dataType)) {
+      this.columnTypes.set(columnType.dataType, columnType);
     }
-    this.columnTypes.set(columnType.dataType, columnType);
   }
 
   public get(dataType: ColumnDataType): IColumnType | undefined {

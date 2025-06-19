@@ -1,4 +1,5 @@
 import React from "react";
+import { useFullscreen } from "../contexts/FullscreenContext";
 import {
   Add,
   Search,
@@ -11,11 +12,9 @@ import {
   Undo,
   Redo,
 } from "@emotion-icons/material-outlined";
-import { CompactSelection } from "@glideapps/glide-data-grid";
 import { Theme } from "@glideapps/glide-data-grid";
 
 interface GridToolbarProps {
-  isFullscreen: boolean;
   isFocused: boolean;
   hasSelection: boolean;
   canUndo: boolean;
@@ -38,7 +37,6 @@ interface GridToolbarProps {
 }
 
 export const GridToolbar: React.FC<GridToolbarProps> = ({
-  isFullscreen,
   isFocused,
   hasSelection,
   canUndo,
@@ -59,6 +57,7 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
   onMouseEnter,
   onMouseLeave,
 }) => {
+  const { isFullscreen } = useFullscreen();
   const containerStyle: React.CSSProperties = {
     display: "flex",
     justifyContent: "flex-end",

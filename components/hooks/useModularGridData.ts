@@ -4,6 +4,9 @@ import { IDataSource } from "../core/interfaces/IDataSource";
 import { DataProvider } from "../core/services/DataProvider";
 import { registerDefaultColumnTypes } from "../core/column-types";
 
+// Register column types once when module loads
+registerDefaultColumnTypes();
+
 export function useModularGridData(
   dataSource: IDataSource,
   visibleColumnIndices: number[],
@@ -11,10 +14,6 @@ export function useModularGridData(
   darkTheme: Partial<Theme>,
   columnFormats?: Record<string, string>
 ) {
-  React.useEffect(() => {
-    registerDefaultColumnTypes();
-  }, []);
-
   // Recreate data provider when theme or formats change to ensure cells use new settings
   const dataProvider = React.useMemo(() => {
     const provider = new DataProvider(dataSource, theme, theme === darkTheme);
@@ -22,7 +21,18 @@ export function useModularGridData(
       provider.setColumnFormats(columnFormats);
     }
     return provider;
-  }, [dataSource, theme, darkTheme, columnFormats]);
+  }, [dataSource]); // Only recreate if data source changes
+
+  // Update theme and formats without recreating the provider
+  React.useEffect(() => {
+    dataProvider.updateTheme(theme, theme === darkTheme);
+  }, [theme, darkTheme, dataProvider]);
+
+  React.useEffect(() => {
+    if (columnFormats) {
+      dataProvider.setColumnFormats(columnFormats);
+    }
+  }, [columnFormats, dataProvider]);
 
   const getRawCellContent = React.useCallback((col: number, row: number): GridCell => {
     return dataProvider.getCell(col, row);

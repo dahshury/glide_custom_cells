@@ -110,7 +110,7 @@ const renderer: CustomRenderer<TempusDateCell> = {
       const [tempusInstance, setTempusInstance] = React.useState<any>(null);
 
       const toLocalDateInputValue = (date: Date): string =>
-        date.toLocaleDateString("en-CA"); // YYYY-MM-DD
+        date.toLocaleDateString("en-GB"); // DD/MM/YYYY
 
       const toLocalDateTimeInputValue = (date: Date): string => {
         const pad = (n: number) => n.toString().padStart(2, "0");
@@ -258,8 +258,8 @@ const renderer: CustomRenderer<TempusDateCell> = {
               maxDate: data.max ? new DateTime(data.max) : undefined,
             },
             localization: {
-              locale: "en-US",
-              format: data.format === "time" ? "HH:mm" : data.format === "date" ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm",
+              locale: "en-GB",
+              format: data.format === "time" ? "HH:mm" : data.format === "date" ? "dd/MM/yyyy" : "dd/MM/yyyy HH:mm",
             },
             container: document.body,
           };
@@ -675,7 +675,7 @@ const renderer: CustomRenderer<TempusDateCell> = {
             return date.toLocaleString();
           case "date":
           default:
-            return date.toLocaleDateString();
+            return date.toLocaleDateString('en-GB');
         }
       };
 
@@ -684,7 +684,7 @@ const renderer: CustomRenderer<TempusDateCell> = {
           case "time": return "time";
           case "datetime": return "datetime-local";
           case "date":
-          default: return "date";
+          default: return "text";
         }
       };
 
@@ -714,9 +714,12 @@ const renderer: CustomRenderer<TempusDateCell> = {
               newDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), hours, minutes);
             }
           } else if (data.format === "date") {
-            const [year, month, day] = value.split("-").map(Number);
-            if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-              newDate = new Date(year, month - 1, day);
+            const parts = value.split("/").map(Number);
+            if (parts.length === 3) {
+              const [day, month, year] = parts;
+              if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                newDate = new Date(year, month - 1, day);
+              }
             }
           } else {
             newDate = new Date(value);
@@ -818,6 +821,7 @@ const renderer: CustomRenderer<TempusDateCell> = {
             onKeyDown={handleKeyDown}
             autoFocus
             disabled={data.readonly}
+            placeholder={data.format === "date" ? "dd/mm/yyyy" : data.format === "time" ? "hh:mm" : ""}
           />
           <button
             ref={iconButtonRef}
@@ -882,7 +886,7 @@ const renderer: CustomRenderer<TempusDateCell> = {
           return date.toLocaleString();
         case "date":
         default:
-          return date.toLocaleDateString();
+          return date.toLocaleDateString('en-GB');
       }
     };
 

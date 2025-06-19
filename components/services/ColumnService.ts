@@ -43,7 +43,7 @@ export class ColumnService {
         return customData.value || "";
       }
       if (customData?.kind === "tempus-date-cell") {
-        return customData.date ? customData.date.toLocaleDateString() : "";
+        return customData.date ? customData.date.toLocaleDateString('en-GB') : "";
       }
       if (customData?.kind === "phone-input-cell") {
         return customData.phone || "";

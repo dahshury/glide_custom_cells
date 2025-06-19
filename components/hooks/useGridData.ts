@@ -166,7 +166,7 @@ function getInitialCell(col: number, row: number, theme: Partial<Theme>, darkThe
             const dateFormat = columnFormats?.[columnId || "date"] || columnFormats?.["date"];
             const formattedDate = dateFormat && data instanceof Date 
                 ? FormattingService.formatValue(data, "date", dateFormat) 
-                : (data instanceof Date ? data.toLocaleDateString() : "");
+                : (data instanceof Date ? data.toLocaleDateString('en-GB') : "");
             return {
                 kind: GridCellKind.Custom,
                 data: {
@@ -262,7 +262,7 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
                     } else {
                         // Use default formatting
                         if (cellData.format === "date") {
-                            cellData.displayDate = date.toLocaleDateString();
+                            cellData.displayDate = date.toLocaleDateString('en-GB');
                         } else if (cellData.format === "time") {
                             cellData.displayDate = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                         } else {
@@ -395,7 +395,7 @@ export function useGridData(visibleColumnIndices: number[], theme: Partial<Theme
                         } else {
                             // Use default formatting
                             if (cellData.format === "date") {
-                                formattedValue = date.toLocaleDateString();
+                                formattedValue = date.toLocaleDateString('en-GB');
                             } else if (cellData.format === "time") {
                                 formattedValue = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                             } else {

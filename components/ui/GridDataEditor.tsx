@@ -1,4 +1,5 @@
 import React from "react";
+import { useFullscreen } from "../contexts/FullscreenContext";
 import DataEditor, {
   DrawCellCallback,
   GetRowThemeCallback,
@@ -41,7 +42,6 @@ interface GridDataEditorProps {
   onSearchClose: () => void;
   theme: Partial<Theme>;
   darkTheme: Partial<Theme>;
-  isFullscreen: boolean;
   hoverRow?: number;
   dataEditorRef: React.RefObject<any>;
   onMouseEnter?: () => void;
@@ -67,12 +67,12 @@ export const GridDataEditor: React.FC<GridDataEditorProps> = ({
   onSearchClose,
   theme,
   darkTheme,
-  isFullscreen,
   hoverRow,
   dataEditorRef,
   onMouseEnter,
   onMouseLeave,
 }) => {
+  const { isFullscreen } = useFullscreen();
   const rowHeight = 33;
   const headerHeight = 35;
 
