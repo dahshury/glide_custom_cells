@@ -8,6 +8,8 @@ import {
 import { PhoneInput } from "@/components/ui/phone-input";
 import { isValidPhoneNumber, getCountryCallingCode, parsePhoneNumber } from "react-phone-number-input";
 import type { Country } from "react-phone-number-input";
+import { PhoneInputService } from "@/components/services/PhoneInputService";
+import { PHONE_INPUT_EDITOR_CONFIG } from "@/components/models/PhoneInputEditorProps";
 
 interface PhoneInputCellProps {
   readonly kind: "phone-input-cell";
@@ -19,27 +21,6 @@ interface PhoneInputCellProps {
 }
 
 export type PhoneInputCell = CustomCell<PhoneInputCellProps>;
-
-const editorStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  display: "flex",
-  alignItems: "center",
-  padding: "4px 8px",
-  fontSize: "13px",
-  fontFamily: "inherit",
-  backgroundColor: "transparent",
-  color: "inherit",
-};
-
-const baseWrapperStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  width: "100%",
-  height: "calc(100% - 5px)",
-  marginTop: "5px", // nudge down to align with grid cell border
-  position: "relative",
-};
 
 const renderer: CustomRenderer<PhoneInputCell> = {
   kind: GridCellKind.Custom,
@@ -70,15 +51,19 @@ const renderer: CustomRenderer<PhoneInputCell> = {
   measure: (ctx, cell, theme) => {
     const { displayPhone, phone } = cell.data;
     const displayText = displayPhone || phone || "";
-    return ctx.measureText(displayText).width + theme.cellHorizontalPadding * 2;
+    const textWidth = ctx.measureText(displayText).width;
+    const padding = theme.cellHorizontalPadding * 2;
+    // Reduce total width by 30%
+    return (textWidth + padding) * 0.7;
   },
 
   provideEditor: () => ({
-    editor: (props) => {
+    editor: React.memo((props) => {
       const { data } = props.value;
       const { onFinishedEditing } = props;
       const [phoneValue, setPhoneValue] = React.useState<string>(data.phone || "");
       const wrapperRef = React.useRef<HTMLDivElement>(null);
+      const updateTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
       // Track the last known value and country for change detection
       const lastKnownValue = React.useRef<string>(data.phone || "");
@@ -93,13 +78,16 @@ const renderer: CustomRenderer<PhoneInputCell> = {
               lastKnownCountry.current = parsed.country;
             }
           } catch (error) {
-            console.warn("Failed to parse initial phone number:", error);
+            // Silently handle parse errors
           }
         }
       }, [data.phone]);
 
       const updateCell = React.useCallback((newPhone: string, shouldFinish = false) => {
-        console.log("Updating cell with phone:", newPhone);
+        // Clear any pending update
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+        }
         
         // Format the display value
         let displayPhone = newPhone;
@@ -116,32 +104,33 @@ const renderer: CustomRenderer<PhoneInputCell> = {
           },
         } as typeof props.value;
 
-        console.log("Updating cell with:", newCell.data);
         props.onChange(newCell);
         
         if (shouldFinish) {
-          console.log("Finishing edit with:", newCell.data);
           onFinishedEditing?.(newCell);
         }
       }, [props, data, onFinishedEditing]);
 
-      // Simple backup check to ensure state consistency
+      // Simple backup check to ensure state consistency and cleanup
       React.useEffect(() => {
         if (phoneValue !== lastKnownValue.current) {
           lastKnownValue.current = phoneValue;
         }
+        
+        // Cleanup timeout on unmount
+        return () => {
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
+        };
       }, [phoneValue]);
 
-      const handleChange = (value: string | undefined) => {
-        // Capture caret position before state change
-        const inputElBefore = wrapperRef.current?.querySelector('input[type="text"]') as HTMLInputElement | null;
-        const caretPos = inputElBefore?.selectionStart ?? null;
-
+      const handleChange = React.useCallback((value: string | undefined) => {
         // Handle the case where react-phone-number-input sends undefined
         // This can happen during country changes or when clearing the input
         if (value === undefined) {
-          // Use a delay to allow DOM updates to complete
-          setTimeout(() => {
+          // Use requestAnimationFrame for smoother updates
+          requestAnimationFrame(() => {
             const inputs = wrapperRef.current?.querySelectorAll('input[type="text"]');
             if (inputs && inputs.length > 0) {
               const mainInput = inputs[0] as HTMLInputElement;
@@ -153,19 +142,17 @@ const renderer: CustomRenderer<PhoneInputCell> = {
               if (newPhone !== phoneValue) {
                 setPhoneValue(newPhone);
                 lastKnownValue.current = newPhone;
-                updateCell(newPhone, false);
-
-                // Restore caret position after state commit
-                setTimeout(() => {
-                  const inputElAfter = wrapperRef.current?.querySelector('input[type="text"]') as HTMLInputElement | null;
-                  if (inputElAfter && caretPos !== null) {
-                    const adjustedPos = Math.min(caretPos, inputElAfter.value.length);
-                    inputElAfter.setSelectionRange(adjustedPos, adjustedPos);
-                  }
-                }, 0);
+                
+                // Debounce the cell update
+                if (updateTimeoutRef.current) {
+                  clearTimeout(updateTimeoutRef.current);
+                }
+                updateTimeoutRef.current = setTimeout(() => {
+                  updateCell(newPhone, false);
+                }, PhoneInputService.getDebounceDelay());
               }
             }
-          }, 100); // Short delay to allow DOM updates
+          });
           
           return;
         }
@@ -177,61 +164,86 @@ const renderer: CustomRenderer<PhoneInputCell> = {
         if (newPhone !== phoneValue) {
           setPhoneValue(newPhone);
           lastKnownValue.current = newPhone;
-          updateCell(newPhone, false);
-
-          // Restore caret position after state commit
-          setTimeout(() => {
-            const inputElAfter = wrapperRef.current?.querySelector('input[type="text"]') as HTMLInputElement | null;
-            if (inputElAfter && caretPos !== null) {
-              const adjustedPos = Math.min(caretPos, inputElAfter.value.length);
-              inputElAfter.setSelectionRange(adjustedPos, adjustedPos);
-            }
-          }, 0);
+          
+          // Debounce the cell update for better performance
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
+          updateTimeoutRef.current = setTimeout(() => {
+            updateCell(newPhone, false);
+          }, PhoneInputService.getDebounceDelay());
         }
-      };
+      }, [phoneValue, updateCell]);
 
-      const handleBlur = () => {
-        console.log("Phone input blur with value:", phoneValue);
+      const handleBlur = React.useCallback(() => {
+        // Clear any pending updates
+        if (updateTimeoutRef.current) {
+          clearTimeout(updateTimeoutRef.current);
+        }
         updateCell(phoneValue, true);
-      };
+      }, [phoneValue, updateCell]);
 
-      const handleKeyDown = (e: React.KeyboardEvent) => {
+      const handleKeyDown = React.useCallback((e: React.KeyboardEvent) => {
         if (e.key === "Enter" || e.key === "Tab") {
           e.preventDefault();
+          // Clear any pending updates
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
           updateCell(phoneValue, true);
         } else if (e.key === "Escape") {
           e.preventDefault();
+          // Clear any pending updates
+          if (updateTimeoutRef.current) {
+            clearTimeout(updateTimeoutRef.current);
+          }
           // Revert to original value
           const originalPhone = data.phone || "";
           setPhoneValue(originalPhone);
           updateCell(originalPhone, true);
         }
-      };
+      }, [phoneValue, data.phone, updateCell]);
 
+      const styles = PhoneInputService.getEditorStyles(data.isDarkTheme || false);
+      
       return (
         <div
           ref={wrapperRef}
           style={{
-            ...baseWrapperStyle,
-            backgroundColor: data.isDarkTheme ? "#1e1e1e" : "#ffffff", // Opaque bg to hide cell text
+            display: "flex",
+            alignItems: "center",
+            width: PHONE_INPUT_EDITOR_CONFIG.customWidth ? `${PHONE_INPUT_EDITOR_CONFIG.customWidth}px` : "100%",
+            maxWidth: PHONE_INPUT_EDITOR_CONFIG.customWidth ? `${PHONE_INPUT_EDITOR_CONFIG.customWidth}px` : "100%",
+            height: "100%",
+            backgroundColor: data.isDarkTheme ? "#1e1e1e" : "#ffffff",
+            padding: "0 8px",
+            boxSizing: "border-box",
+            overflow: "hidden"
           }}
         >
-          <div style={editorStyle}>
-            <PhoneInput
-              value={phoneValue}
-              onChange={handleChange}
-              onBlur={handleBlur}
-              onKeyDown={handleKeyDown}
-              placeholder="Enter phone number"
-              initialValueFormat="national"
-              className="w-full border-none focus:ring-0 focus:outline-none bg-transparent"
-            />
-          </div>
+          <PhoneInput
+            value={phoneValue}
+            onChange={handleChange}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            placeholder="Enter phone number"
+            initialValueFormat="national"
+            className="phone-input w-full border-none focus:ring-0 focus:outline-none bg-transparent"
+            style={{
+              transform: "translateY(3px)",
+              maxWidth: "100%"
+            }}
+          />
         </div>
       );
-    },
-    disablePadding: true,
-    disableStyling: true,
+    }),
+    disablePadding: PHONE_INPUT_EDITOR_CONFIG.disablePadding,
+    disableStyling: PHONE_INPUT_EDITOR_CONFIG.disableStyling,
+    needsEscapeKey: PHONE_INPUT_EDITOR_CONFIG.needsEscapeKey,
+    needsTabKey: PHONE_INPUT_EDITOR_CONFIG.needsTabKey,
+    portalElement: PHONE_INPUT_EDITOR_CONFIG.portalElement,
+    width: PHONE_INPUT_EDITOR_CONFIG.customWidth,
+    maxWidth: PHONE_INPUT_EDITOR_CONFIG.maxWidth,
   }),
 
   onPaste: (v, d) => {

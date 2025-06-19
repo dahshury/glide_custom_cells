@@ -59,18 +59,12 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
   onMouseEnter,
   onMouseLeave,
 }) => {
-  const containerStyle: React.CSSProperties = isFullscreen
-    ? {
-        position: "fixed",
-        top: "1rem",
-        right: "1rem",
-        zIndex: 1000,
-      }
-    : {
-        display: "flex",
-        justifyContent: "flex-end",
-        marginBottom: "8px",
-      };
+  const containerStyle: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "flex-end",
+    marginBottom: "8px",
+    width: "100%",
+  };
 
   const toolbarStyle: React.CSSProperties = {
     display: "flex",
@@ -86,8 +80,8 @@ export const GridToolbar: React.FC<GridToolbarProps> = ({
     opacity: isFocused || isFullscreen ? 1 : 0,
     transition: isFocused || isFullscreen ? "opacity 150ms ease-in" : "opacity 600ms ease-out",
     pointerEvents: "auto",
-    transform: "scale(0.8)",
-    transformOrigin: isFullscreen ? "top right" : "bottom right",
+    transform: isFullscreen ? "scale(1)" : "scale(0.8)",
+    transformOrigin: "bottom right",
   };
 
   const [hoveredButton, setHoveredButton] = React.useState<string | null>(null);

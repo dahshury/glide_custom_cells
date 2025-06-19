@@ -31,7 +31,7 @@ const PhoneInput: React.ForwardRefExoticComponent<PhoneInputProps> =
       return (
         <RPNInput.default
           ref={ref}
-          className={cn("flex", className)}
+          className={cn("flex h-full items-center", className)}
           flagComponent={FlagComponent}
           countrySelectComponent={CountrySelect}
           inputComponent={InputComponent}
@@ -55,33 +55,21 @@ const PhoneInput: React.ForwardRefExoticComponent<PhoneInputProps> =
   );
 PhoneInput.displayName = "PhoneInput";
 
-const editorStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-  display: "flex",
-  alignItems: "center",
-  padding: "0 4px",
-  fontSize: "13px",
-  fontFamily: "inherit",
-  backgroundColor: "transparent",
-  color: "inherit",
-};
 
-const baseWrapperStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  width: "100%",
-  height: "100%",
-  position: "relative",
-};
 
 const InputComponent = React.forwardRef<
   HTMLInputElement,
   React.ComponentProps<"input">
 >(({ className, ...props }, ref) => (
   <Input
-    className={cn("rounded-e-lg rounded-s-none h-full py-0", className)}
-    style={{ height: "100%" }}
+    className={cn("rounded-e-lg rounded-s-none h-full py-0 px-2 text-sm", className)}
+    style={{ 
+      height: "100%",
+      minHeight: "28px",
+      lineHeight: "28px",
+      fontSize: "13px",
+      border: "none"
+    }}
     {...props}
     ref={ref}
   />
@@ -120,8 +108,14 @@ const CountrySelect = ({
           type="button"
           variant="ghost"
           size="sm"
-          className="flex gap-1 rounded-e-none rounded-s-lg border-r-0 px-1 h-full py-0 focus:z-10"
-          style={{ height: "100%" }}
+          className="flex gap-1 rounded-e-none rounded-s-lg border-r-0 px-1 h-full py-0 focus:z-10 items-center justify-center"
+          style={{ 
+            height: "100%",
+            minHeight: "28px",
+            minWidth: "50px",
+            lineHeight: "28px",
+            fontSize: "13px"
+          }}
           disabled={disabled}
         >
           <FlagComponent
@@ -136,7 +130,19 @@ const CountrySelect = ({
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[210px] p-0"> {/* Reduced width by ~30% (300px to 210px) */}
+      <PopoverContent 
+        className="w-[210px] p-0 overflow-hidden" 
+        align="start"
+        side="bottom"
+        sideOffset={4}
+        collisionPadding={10}
+        avoidCollisions={true}
+        style={{ 
+          borderRadius: "0.5rem",
+          boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+          maxHeight: "300px"
+        }}
+      >
         <Command>
           <CommandInput placeholder="Search country..." />
           <CommandList>

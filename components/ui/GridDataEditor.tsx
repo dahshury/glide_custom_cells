@@ -9,6 +9,7 @@ import DataEditor, {
   Theme,
   GridSelection,
   CustomRenderer,
+  drawTextCell,
 } from "@glideapps/glide-data-grid";
 import { DropdownCell as DropdownRenderer } from "@glideapps/glide-data-grid-cells";
 import TempusDateCellRenderer from "../TempusDominusDateCell";
@@ -75,18 +76,49 @@ export const GridDataEditor: React.FC<GridDataEditorProps> = ({
   const rowHeight = 33;
   const headerHeight = 35;
 
-  const calcHeight = () => headerHeight + filteredRowCount * rowHeight + rowHeight;
+  const calcHeight = () => {
+    const baseHeight = headerHeight + filteredRowCount * rowHeight + rowHeight;
+    if (isFullscreen) {
+      // In fullscreen, show more rows but cap at a reasonable height
+      const maxVisibleRows = 25; // Show up to 25 rows in fullscreen
+      const maxHeight = headerHeight + (maxVisibleRows * rowHeight) + rowHeight;
+      return Math.min(baseHeight, maxHeight);
+    }
+    return baseHeight;
+  };
 
   const drawCell: DrawCellCallback = React.useCallback(
     (args, draw) => {
-      const { cell, col } = args;
+      const { cell, col, ctx, rect } = args;
       const column = displayColumns[col] as any;
 
       if ((cell as any).isMissingValue) {
+        // Save context state
+        ctx.save();
+        
+        // First draw the cell normally to get proper background
+        draw();
+        
+        // Then draw "None" placeholder text with light color on top
+        drawTextCell(
+          {
+            ...args,
+            theme: {
+              ...(theme as Theme),
+              textDark: (theme as Theme).textLight,
+            },
+          } as any,
+          "None",
+          cell.contentAlign
+        );
+        
+        // Draw red attention indicator for required fields
         if ((column as any)?.isRequired && (column as any)?.isEditable) {
-          const { ctx, rect } = args;
           drawAttentionIndicator(ctx, rect, theme as Theme);
         }
+        
+        // Restore context state
+        ctx.restore();
         return;
       }
       draw();
@@ -111,28 +143,28 @@ export const GridDataEditor: React.FC<GridDataEditorProps> = ({
         } as any;
       }
 
-      return undefined;
+      // Ensure each row has its own clean theme
+      return {
+        bgCell: (theme as any).bgCell,
+        bgCellMedium: (theme as any).bgCellMedium,
+        textDark: (theme as any).textDark,
+        textLight: (theme as any).textLight,
+      };
     },
     [hoverRow, theme, filteredRowCount]
   );
 
   const containerStyle: React.CSSProperties = {
-    width: "100%",
-    height: isFullscreen ? "100vh" : "auto",
-    position: isFullscreen ? "fixed" : "relative",
-    top: isFullscreen ? 0 : "auto",
-    left: isFullscreen ? 0 : "auto",
-    right: isFullscreen ? 0 : "auto",
-    bottom: isFullscreen ? 0 : "auto",
-    zIndex: isFullscreen ? 999 : undefined,
-    backgroundColor: isFullscreen
-      ? theme === darkTheme
-        ? "#1e1e1e"
-        : "#ffffff"
-      : "transparent",
-    padding: isFullscreen ? "60px 20px 20px 20px" : 0,
+    width: "fit-content",
+    maxWidth: "100%",
+    height: isFullscreen ? "100%" : "auto",
+    position: "relative",
     borderRadius: "12px",
     overflow: "hidden",
+    flex: isFullscreen ? undefined : undefined,
+    display: "inline-block",
+    padding: isFullscreen ? "16px" : undefined,
+    margin: "0 auto",
   };
 
   return (
@@ -145,8 +177,8 @@ export const GridDataEditor: React.FC<GridDataEditorProps> = ({
         getCellContent={getCellContent}
         columns={displayColumns}
         rows={filteredRowCount}
-        width="100%"
-        height={isFullscreen ? "calc(100vh - 80px)" : calcHeight()}
+        width={displayColumns.reduce((sum, col) => sum + ((col as any).width || 150), 60)}
+        height={calcHeight()}
         maxColumnAutoWidth={400}
         maxColumnWidth={2000}
         minColumnWidth={50}
@@ -179,6 +211,9 @@ export const GridDataEditor: React.FC<GridDataEditorProps> = ({
         headerHeight={headerHeight}
         getCellsForSelection={true}
         fillHandle={true}
+        trailingRowOptions={{
+          sticky: true,
+        }}
       />
     </div>
   );

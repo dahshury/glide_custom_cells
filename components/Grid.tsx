@@ -13,12 +13,14 @@ import { GridToolbar } from "./ui/GridToolbar";
 import { GridDataEditor } from "./ui/GridDataEditor";
 import { ColumnMenu } from "./menus/ColumnMenu";
 import Tooltip from "./Tooltip";
+import { FullscreenWrapper } from "./ui/FullscreenWrapper";
 
 import { useColumnMenu } from "./hooks/useColumnMenu";
 import { useGridTheme } from "./hooks/useGridTheme";
 import { useGridColumns } from "./hooks/useGridColumns";
 import { useGridState } from "./hooks/useGridState";
 import { useGridData } from "./hooks/useGridData";
+import { useModularGridData } from "./hooks/useModularGridData";
 import { useGridTooltips } from "./hooks/useGridTooltips";
 import { useGridActions } from "./hooks/useGridActions";
 import { useGridEvents } from "./hooks/useGridEvents";
@@ -26,8 +28,13 @@ import { useGridLifecycle } from "./hooks/useGridLifecycle";
 import { useUndoRedo } from "./hooks/useUndoRedo";
 import { useGridDataOperations } from "./hooks/useGridDataOperations";
 import { useColumnOperations } from "./hooks/useColumnOperations";
+import { InMemoryDataSource } from "./core/data-sources/InMemoryDataSource";
 
 export default function Grid() {
+  // Initialize the data source
+  const dataSource = React.useMemo(() => {
+    return new InMemoryDataSource(8, 6);
+  }, []);
   const gs = useGridState();
   const { theme, setTheme, darkTheme, lightTheme, iconColor } = useGridTheme();
   const [isToolbarHovered, setIsToolbarHovered] = React.useState(false);
@@ -36,6 +43,27 @@ export default function Grid() {
   React.useEffect(() => {
     setIsToolbarHovered(false);
   }, [gs.isFullscreen]);
+
+  // Handle ESC key to exit fullscreen
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && gs.isFullscreen) {
+        gs.setIsFullscreen(false);
+      }
+    };
+
+    if (gs.isFullscreen) {
+      document.addEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "unset";
+    }
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = "unset";
+    };
+  }, [gs.isFullscreen, gs]);
 
   // Add menu animations
   React.useEffect(() => {
@@ -77,22 +105,30 @@ export default function Grid() {
     onColumnMoved,
     togglePin,
     pinnedColumns,
-  } = useGridColumns(gs.hiddenColumns);
+  } = useGridColumns(gs.hiddenColumns, dataSource);
 
   const columnMenu = useColumnMenu();
 
+  // Use the new modular data system
   const {
     getCellContent: baseGetCellContent,
     onCellEdited: baseOnCellEdited,
     getRawCellContent,
-  } = useGridData(
+    dataProvider,
+  } = useModularGridData(
+    dataSource,
     visibleColumnIndices,
     theme,
     darkTheme,
-    gs.initialNumRows,
-    columnMenu.columnFormats,
-    columnsState
+    columnMenu.columnFormats
   );
+
+
+
+  // Update the grid state to use data source row count
+  React.useEffect(() => {
+    gs.setNumRows(dataSource.rowCount);
+  }, [dataSource.rowCount, gs]);
 
   const {
     filteredRows,
@@ -102,8 +138,8 @@ export default function Grid() {
     handleSort,
   } = useGridDataOperations({
     searchValue: gs.searchValue,
-    deletedRows: gs.deletedRows,
-    numRows: gs.numRows,
+    deletedRows: dataProvider.getDeletedRows(),
+    numRows: dataSource.rowCount,
     displayColumns,
     visibleColumnIndices,
     getRawCellContent,
@@ -141,7 +177,7 @@ export default function Grid() {
 
       return baseCell;
     },
-    [filteredRows, baseGetCellContent, displayColumns, theme, darkTheme]
+    [filteredRows, baseGetCellContent, displayColumns, theme, darkTheme, dataProvider]
   );
 
   const onCellEdited = React.useCallback(
@@ -169,9 +205,9 @@ export default function Grid() {
     gs.selection,
     gs.setDeletedRows,
     filteredRows,
-    gs.numRows,
+    dataSource.rowCount,
     getRawCellContent,
-    gs.deletedRows,
+    dataProvider.getDeletedRows(),
     columnsState,
     setColumns,
     gs.hiddenColumns
@@ -198,10 +234,22 @@ export default function Grid() {
     gs.setRowSelection(CompactSelection.empty());
   }, [gs]);
 
-  const deleteRows = React.useCallback(() => {
-    actions.handleDeleteRows();
+  const deleteRows = React.useCallback(async () => {
+    const rowsToDelete = new Set<number>();
+    gs.selection.rows.toArray().forEach(r => {
+      const actualRow = filteredRows[r];
+      if (actualRow !== undefined) {
+        rowsToDelete.add(actualRow);
+      }
+    });
+
+    for (const row of rowsToDelete) {
+      await dataProvider.deleteRow(row);
+    }
+    
     clearSelection();
-  }, [actions, clearSelection]);
+    await dataProvider.refresh();
+  }, [gs.selection.rows, filteredRows, dataProvider, clearSelection]);
 
   const handleItemHovered = React.useCallback((args: any) => {
     const loc = args.location;
@@ -231,49 +279,87 @@ export default function Grid() {
     dataEditorRef,
   });
 
-  return (
-    <div
-      style={{
-        width: "100%",
-        height: "100%",
-        position: "relative",
-        borderRadius: "12px",
-        overflow: "hidden",
-      }}
+    return (
+    <FullscreenWrapper 
+      isFullscreen={gs.isFullscreen} 
+      theme={theme} 
+      darkTheme={darkTheme}
     >
-      <GridThemeToggle
-        currentTheme={theme}
-        lightTheme={lightTheme}
-        darkTheme={darkTheme}
-        iconColor={iconColor}
-        filteredRowCount={filteredRowCount}
-        onThemeChange={setTheme}
-      />
+      <div
+        style={{
+          width: "100%",
+          height: gs.isFullscreen ? "100%" : "100%",
+          position: "relative",
+          borderRadius: "12px",
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: gs.isFullscreen ? undefined : "center",
+          flex: gs.isFullscreen ? 1 : undefined,
+          border: gs.isFullscreen 
+            ? "none"
+            : undefined,
+          boxShadow: gs.isFullscreen
+            ? "none"
+            : undefined,
+        }}
+      >
+        {!gs.isFullscreen && (
+          <GridThemeToggle
+            currentTheme={theme}
+            lightTheme={lightTheme}
+            darkTheme={darkTheme}
+            iconColor={iconColor}
+            filteredRowCount={filteredRowCount}
+            onThemeChange={(newTheme) => {
+              setTheme(newTheme);
+              // Force grid to refetch all cells by toggling search
+              const currentSearch = gs.searchValue;
+              gs.setSearchValue(currentSearch + " ");
+              requestAnimationFrame(() => {
+                gs.setSearchValue(currentSearch);
+              });
+            }}
+          />
+        )}
 
-      <GridToolbar
-        isFullscreen={gs.isFullscreen}
-        isFocused={gs.isFocused || isToolbarHovered}
-        hasSelection={actions.hasSelection}
-        canUndo={canUndo}
-        canRedo={canRedo}
-        hasHiddenColumns={columns.length > displayColumns.length}
-        theme={theme}
-        darkTheme={darkTheme}
-        iconColor={iconColor}
-        onClearSelection={clearSelection}
-        onDeleteRows={deleteRows}
-        onUndo={undo}
-        onRedo={redo}
-        onAddRow={() => gs.setNumRows((n) => n + 1)}
-        onToggleColumnVisibility={actions.handleToggleColumnVisibility}
-        onDownloadCsv={actions.handleDownloadCsv}
-        onToggleSearch={() => gs.setShowSearch((v) => !v)}
-        onToggleFullscreen={() => gs.setIsFullscreen((v) => !v)}
-        onMouseEnter={() => setIsToolbarHovered(true)}
-        onMouseLeave={() => setIsToolbarHovered(false)}
-      />
+              <div style={{ 
+          width: "fit-content", 
+          maxWidth: "100%", 
+          margin: "0 auto",
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: "12px",
+          overflow: "hidden",
+        }}>
+          <GridToolbar
+            isFullscreen={gs.isFullscreen}
+            isFocused={gs.isFocused || isToolbarHovered}
+            hasSelection={actions.hasSelection}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            hasHiddenColumns={columns.length > displayColumns.length}
+            theme={theme}
+            darkTheme={darkTheme}
+            iconColor={iconColor}
+            onClearSelection={clearSelection}
+            onDeleteRows={deleteRows}
+            onUndo={undo}
+            onRedo={redo}
+            onAddRow={async () => {
+              await dataProvider.addRow();
+              gs.setNumRows(dataSource.rowCount);
+              await dataProvider.refresh();
+            }}
+            onToggleColumnVisibility={actions.handleToggleColumnVisibility}
+            onDownloadCsv={actions.handleDownloadCsv}
+            onToggleSearch={() => gs.setShowSearch((v) => !v)}
+            onToggleFullscreen={() => gs.setIsFullscreen((v) => !v)}
+            onMouseEnter={() => setIsToolbarHovered(true)}
+            onMouseLeave={() => setIsToolbarHovered(false)}
+          />
 
-      <GridDataEditor
+          <GridDataEditor
         displayColumns={displayColumns}
         filteredRows={filteredRows}
         filteredRowCount={filteredRowCount}
@@ -282,19 +368,26 @@ export default function Grid() {
         onGridSelectionChange={onGridSelectionChange}
         gridSelection={gs.selection}
         pinnedColumnsCount={pinnedColumns.length}
-        onColumnResize={(column: GridColumn, newSize: number) => {
-          const colIdx = displayColumns.findIndex(c => c.id === column.id);
-          if (colIdx >= 0) {
-            onColumnResize(column, newSize, colIdx, newSize);
-          }
+        onColumnResize={onColumnResize}
+        onRowAppended={() => {
+          // Execute async operations but return synchronously
+          (async () => {
+            await dataProvider.addRow();
+            gs.setNumRows(dataSource.rowCount);
+            await dataProvider.refresh();
+          })();
+          // Explicitly return false to prevent auto-edit mode
+          return false;
         }}
-          onRowAppended={() => gs.setNumRows((n) => n + 1)}
         onItemHovered={handleItemHovered}
         onHeaderMenuClick={handleHeaderMenuClick}
-          searchValue={gs.searchValue}
-          onSearchValueChange={gs.setSearchValue}
-          showSearch={gs.showSearch}
-          onSearchClose={() => gs.setShowSearch(false)}
+        searchValue={gs.searchValue}
+        onSearchValueChange={gs.setSearchValue}
+        showSearch={gs.showSearch}
+        onSearchClose={() => {
+          gs.setShowSearch(false);
+          gs.setSearchValue("");
+        }}
         theme={theme}
         darkTheme={darkTheme}
         isFullscreen={gs.isFullscreen}
@@ -302,7 +395,10 @@ export default function Grid() {
         dataEditorRef={dataEditorRef}
         onMouseEnter={() => gs.setIsFocused(true)}
         onMouseLeave={() => gs.setIsFocused(false)}
-      />
+              />
+        </div>
+
+      </div>
 
       <Tooltip
         content={tooltipData.content}
@@ -327,6 +423,6 @@ export default function Grid() {
           isDarkTheme={theme === darkTheme}
         />
       )}
-    </div>
+    </FullscreenWrapper>
   );
 }

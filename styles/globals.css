@@ -58,6 +58,205 @@
   }
 }
 
+@layer utilities {
+  /* Animation utilities for smooth transitions */
+  .animate-in {
+    animation: animateIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  
+  .animate-out {
+    animation: animateOut 150ms cubic-bezier(0.4, 0, 1, 1);
+  }
+  
+  @keyframes animateIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  
+  @keyframes animateOut {
+    from {
+      opacity: 1;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+  }
+  
+  /* Tempus Dominus Picker Animations */
+  .tempus-dominus-widget,
+  .tempus-dominus-container,
+  [class*="tempus-dominus"],
+  .datepicker,
+  [role="dialog"].calendar-picker {
+    transform-origin: top left;
+    transition: none !important; /* Override any default transitions */
+  }
+  
+  .tempus-dominus-widget.td-show-animate,
+  .tempus-dominus-container.td-show-animate,
+  [class*="tempus-dominus"].td-show-animate,
+  .datepicker.td-show-animate,
+  [role="dialog"].td-show-animate {
+    animation: tempusSlideIn 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  }
+  
+  .tempus-dominus-widget.td-hide-animate,
+  .tempus-dominus-container.td-hide-animate,
+  [class*="tempus-dominus"].td-hide-animate,
+  .datepicker.td-hide-animate,
+  [role="dialog"].td-hide-animate {
+    animation: tempusSlideOut 200ms cubic-bezier(0.4, 0, 1, 1) forwards !important;
+  }
+  
+  @keyframes tempusSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.95);
+      visibility: visible;
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      visibility: visible;
+    }
+  }
+  
+  @keyframes tempusSlideOut {
+    from {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      visibility: visible;
+    }
+    to {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.95);
+      visibility: visible;
+    }
+  }
+  
+  /* Ensure smooth transitions for internal elements */
+  .tempus-dominus-widget *,
+  .tempus-dominus-container *,
+  [class*="tempus-dominus"] * {
+    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  }
+  
+  /* Prevent layout shifts during animation */
+  .tempus-dominus-widget.show,
+  .tempus-dominus-widget.active,
+  .tempus-dominus-container.show,
+  .tempus-dominus-container.active,
+  [class*="tempus-dominus"].show,
+  [class*="tempus-dominus"].active {
+    pointer-events: auto;
+  }
+  
+  .tempus-dominus-widget:not(.show):not(.active),
+  .tempus-dominus-container:not(.show):not(.active),
+  [class*="tempus-dominus"]:not(.show):not(.active) {
+    pointer-events: none;
+  }
+  
+  /* Additional styles for Glide Data Grid context */
+  .glide-data-grid-container .tempus-dominus-widget,
+  .gdg-container .tempus-dominus-widget,
+  body > .tempus-dominus-widget {
+    z-index: 9999;
+  }
+  
+  /* Generic date picker animations for any dropdown/popover style widgets */
+  .dropdown-menu.tempus-dominus-widget,
+  .popover.tempus-dominus-widget,
+  .dropdown-menu[class*="tempus"],
+  .popover[class*="tempus"],
+  .modal[class*="tempus"],
+  div[id*="tempus-dominus"] {
+    transform-origin: top left !important;
+  }
+  
+  /* Apply animations to Bootstrap dropdown menus used by date pickers */
+  .dropdown-menu.show[class*="tempus"],
+  .dropdown-menu.show[id*="tempus"],
+  .popover.show[class*="tempus"] {
+    animation: tempusSlideIn 250ms cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+  }
+  
+  /* Glide Data Grid specific portal animations */
+  .dvn-portal .tempus-dominus-widget,
+  .dvn-portal [class*="tempus-dominus"],
+  [data-overlay-container] .tempus-dominus-widget,
+  [data-overlay-container] [class*="tempus-dominus"] {
+    transform-origin: top left !important;
+  }
+  
+  /* Force animation on any element with inline animation style */
+  [style*="tempusSlideIn"],
+  [style*="tempusSlideOut"] {
+    opacity: 0;
+  }
+  
+  /* Make sure animations are visible in grid context */
+  .glide-data-grid-overlay-editor .tempus-dominus-widget,
+  .glide-data-grid-overlay-editor [class*="tempus-dominus"],
+  .click-outside-ignore .tempus-dominus-widget,
+  .click-outside-ignore [class*="tempus-dominus"] {
+    z-index: 999999 !important;
+    position: absolute !important;
+  }
+  
+  /* Ensure Tempus Dominus widgets are above everything */
+  body > .tempus-dominus-widget,
+  body > [class*="tempus-dominus"],
+  body > .dropdown-menu[class*="tempus"] {
+    z-index: 999999 !important;
+    position: fixed !important;
+    pointer-events: auto !important;
+  }
+  
+  /* Smooth scrollbar */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+  }
+  
+  /* Smooth edges for cropped content */
+  .smooth-edges {
+    -webkit-mask-image: linear-gradient(to bottom, 
+      transparent 0%, 
+      black 2px, 
+      black calc(100% - 2px), 
+      transparent 100%
+    );
+    mask-image: linear-gradient(to bottom, 
+      transparent 0%, 
+      black 2px, 
+      black calc(100% - 2px), 
+      transparent 100%
+    );
+  }
+}
+
 html, body {
   padding: 0;
   margin: 0;
@@ -72,4 +271,39 @@ html, body {
 #__next {
   height: 100%;
   width: 100%;
+}
+
+/* Fix: ensure selected option text inside react-select dropdowns is white in dark mode */
+.dark [role="option"][aria-selected="true"] {
+  color: #ffffff !important;
+}
+
+/* Phone Input Editor Styles - Target inner content only to preserve positioning */
+/* Don't set width on the absolute/fixed positioned containers */
+.click-outside-ignore > div[style*="display: flex"]:has(.phone-input),
+.click-outside-ignore > div[style*="display: flex"]:has(input[type="tel"]),
+.click-outside-ignore .phone-input,
+.click-outside-ignore input[type="tel"] {
+  width: 200px !important;
+  min-width: 200px !important;
+  max-width: 200px !important;
+}
+
+/* Target the wrapper div inside the editor */
+.click-outside-ignore > div:first-child:has(.phone-input) {
+  width: 200px !important;
+  min-width: 200px !important;
+  max-width: 200px !important;
+}
+
+/* Reduce the blue outline on the phone input editor */
+.glide-data-grid-overlay-editor,
+.click-outside-ignore {
+  outline-width: 2px !important;
+  outline-offset: -1px !important;
+}
+
+/* Ensure the phone input component itself respects the width */
+.phone-input {
+  max-width: 200px !important;
 } 

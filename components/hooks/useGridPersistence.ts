@@ -1,14 +1,14 @@
 import React from "react";
 import { EditingState } from "../models/EditingState";
-import { BaseColumn } from "../hooks/useGridColumns";
+import { GridColumn } from "@glideapps/glide-data-grid";
 import { BaseColumnProps } from "../core/types";
 
 const GRID_STATE_KEY = "gridState";
 
 export function useGridPersistence(
     editingState: React.MutableRefObject<EditingState>,
-    columnsState: BaseColumn[],
-    setColumns: React.Dispatch<React.SetStateAction<BaseColumn[]>>,
+    columnsState: GridColumn[],
+    setColumns: React.Dispatch<React.SetStateAction<GridColumn[]>>,
     hiddenColumns: Set<number>,
     setHiddenColumns: React.Dispatch<React.SetStateAction<Set<number>>>
 ) {

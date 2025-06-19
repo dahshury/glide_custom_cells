@@ -19,39 +19,14 @@ interface FormatOption {
 
 const NUMBER_FORMATS: FormatOption[] = [
   {
-    format: "automatic",
-    label: "Automatic",
-    icon: <Schedule size={16} />,
-  },
-  {
-    format: "localized",
-    label: "Localized",
-    icon: <Translate size={16} />,
-  },
-  {
-    format: "plain",
-    label: "Plain",
+    format: "number",
+    label: "Number",
     icon: <Speed size={16} />,
   },
   {
-    format: "compact",
-    label: "Compact",
-    icon: <Speed size={16} />,
-  },
-  {
-    format: "dollar",
-    label: "Dollar",
+    format: "currency",
+    label: "Currency (USD)",
     icon: <AttachMoney size={16} />,
-  },
-  {
-    format: "euro",
-    label: "Euro",
-    icon: <Euro size={16} />,
-  },
-  {
-    format: "yen",
-    label: "Yen",
-    icon: <Euro size={16} />,
   },
   {
     format: "percent",
@@ -64,9 +39,9 @@ const NUMBER_FORMATS: FormatOption[] = [
     icon: <Science size={16} />,
   },
   {
-    format: "accounting",
-    label: "Accounting",
-    icon: <AccountBalance size={16} />,
+    format: "compact",
+    label: "Compact",
+    icon: <Speed size={16} />,
   },
 ];
 
@@ -280,6 +255,24 @@ function getFormatsForColumn(column: BaseColumnProps): FormatOption[] {
 }
 
 function determineColumnKind(column: BaseColumnProps): string {
+  // First check if column has dataType property
+  const dataType = (column as any).dataType;
+  if (dataType) {
+    switch (dataType) {
+      case "number":
+        return "number";
+      case "date":
+        return "date";
+      case "time":
+        return "time";
+      case "datetime":
+        return "datetime";
+      default:
+        // Fall through to name-based detection
+    }
+  }
+
+  // Fallback to name-based detection
   const name = (column as any).name ? (column as any).name.toLowerCase() : (column as any).title?.toLowerCase() ?? "";
   const id = (column as any).id ? (column as any).id.toLowerCase() : "";
   

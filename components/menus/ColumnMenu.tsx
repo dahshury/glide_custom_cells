@@ -195,8 +195,7 @@ export function ColumnMenu({
         </>
       )}
 
-      {onChangeFormat && (column.id === "number" || column.id === "date" || column.id === "time" || 
-        (column.title && (column.title.toLowerCase().includes("number") || column.title.toLowerCase().includes("date") || column.title.toLowerCase().includes("time")))) && (
+      {onChangeFormat && ((column as any).dataType === "number" || (column as any).dataType === "date" || (column as any).dataType === "time") && (
         <div
           onMouseEnter={handleFormatMenuEnter}
           onMouseLeave={handleFormatMenuLeave}
